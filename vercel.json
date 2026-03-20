@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/process-visitors",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/push-ghl",
+      "schedule": "0 7 * * *"
+    }
+  ]
+}
