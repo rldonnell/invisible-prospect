@@ -9,13 +9,11 @@ import { getDb } from '../../../../lib/db';
  * 1. Single visitor event (real-time webhook from pixel platform):
  *    { "client_key": "sa-spine", "visitor": { ...fields } }
  *
- * 2. Batch upload (array of visitors from CSV export):
+ * 2. Batch upload (array of visitors from CSV export or Audience Lab webhook):
  *    { "client_key": "sa-spine", "visitors": [ { ...fields }, ... ] }
  *
- * Visitor fields expected (matching pixel CSV export columns):
- *   FIRST_NAME, LAST_NAME, PERSONAL_VERIFIED_EMAILS, ALL_MOBILES,
- *   PERSONAL_CITY, PERSONAL_STATE, AGE_RANGE, GENDER, INCOME_RANGE,
- *   NET_WORTH, FULL_URL, REFERRER_URL, EVENT_TIMESTAMP
+ * Accepts BOTH Audience Lab native column names (UPPER_CASE) and
+ * normalized lowercase names for flexibility.
  */
 export async function POST(request) {
   // Auth guard
@@ -45,8 +43,8 @@ export async function POST(request) {
     let skipped = 0;
 
     for (const v of visitorList) {
-      // Extract email as primary key
-      const rawEmail = v.PERSONAL_VERIFIED_EMAILS || v.email || '';
+      // ── Primary email (dedup key) ──
+      const rawEmail = v.PERSONAL_VERIFIED_EMAILS || v.personal_verified_emails || v.email || '';
       const email = rawEmail.includes(',')
         ? rawEmail.split(',')[0].trim().toLowerCase()
         : rawEmail.trim().toLowerCase();
@@ -56,33 +54,72 @@ export async function POST(request) {
         continue;
       }
 
-      const fullUrl = v.FULL_URL || v.full_url || '';
-      const referrer = v.REFERRER_URL || v.referrer_url || '';
-      const timestamp = v.EVENT_TIMESTAMP || v.timestamp || new Date().toISOString();
+      // ── Core fields ──
+      const fullUrl    = v.FULL_URL || v.full_url || '';
+      const referrer   = v.REFERRER_URL || v.referrer_url || '';
+      const timestamp  = v.EVENT_TIMESTAMP || v.event_timestamp || v.timestamp || new Date().toISOString();
 
-      const phone = v.ALL_MOBILES || v.ALL_LANDLINES || v.phone || '';
+      const phone      = v.ALL_MOBILES || v.all_mobiles || v.ALL_LANDLINES || v.all_landlines || v.phone || '';
       const primaryPhone = phone.includes(',') ? phone.split(',')[0].trim() : phone.trim();
 
-      const firstName = (v.FIRST_NAME || v.first_name || '').trim();
-      const lastName = (v.LAST_NAME || v.last_name || '').trim();
-      const city = (v.PERSONAL_CITY || v.city || '').trim();
-      const state = (v.PERSONAL_STATE || v.state || '').trim();
-      const ageRange = v.AGE_RANGE || v.age_range || '';
-      const gender = v.GENDER || v.gender || '';
-      const income = v.INCOME_RANGE || v.income || '';
-      const netWorth = v.NET_WORTH || v.net_worth || '';
-      const linkedin = v.INDIVIDUAL_LINKEDIN_URL || v.linkedin || '';
+      const firstName  = (v.FIRST_NAME || v.first_name || '').trim();
+      const lastName   = (v.LAST_NAME || v.last_name || '').trim();
+      const city       = (v.PERSONAL_CITY || v.personal_city || v.city || '').trim();
+      const state      = (v.PERSONAL_STATE || v.personal_state || v.state || '').trim();
+      const ageRange   = v.AGE_RANGE || v.age_range || '';
+      const gender     = v.GENDER || v.gender || '';
+      const income     = v.INCOME_RANGE || v.income_range || v.income || '';
+      const netWorth   = v.NET_WORTH || v.net_worth || '';
+      const linkedin   = v.INDIVIDUAL_LINKEDIN_URL || v.individual_linkedin_url || v.linkedin || '';
+
+      // ── Enrichment: Address & Demographics ──
+      const address    = (v.PERSONAL_ADDRESS || v.personal_address || v.address || '').trim();
+      const zip        = (v.PERSONAL_ZIP || v.personal_zip || v.zip || '').trim();
+      const homeowner  = (v.HOMEOWNER || v.homeowner || '').trim();
+      const married    = (v.MARRIED || v.married || '').trim();
+      const children   = (v.CHILDREN || v.children || '').trim();
+
+      // ── Enrichment: Employer / B2B ──
+      const companyName     = (v.COMPANY_NAME || v.company_name || '').trim();
+      const jobTitle        = (v.JOB_TITLE || v.job_title || '').trim();
+      const companyIndustry = (v.COMPANY_INDUSTRY || v.company_industry || '').trim();
+      const companySize     = (v.COMPANY_EMPLOYEE_COUNT || v.company_employee_count || v.company_size || '').trim();
+      const companyRevenue  = (v.COMPANY_REVENUE || v.company_revenue || '').trim();
+      const department      = (v.DEPARTMENT || v.department || '').trim();
+      const seniorityLevel  = (v.SENIORITY_LEVEL || v.seniority_level || '').trim();
+
+      // ── Enrichment: Identity & Emails ──
+      const allEmails    = (v.PERSONAL_EMAILS || v.personal_emails || v.all_emails || '').trim();
+      const businessEmail = (v.BUSINESS_EMAIL || v.BUSINESS_VERIFIED_EMAILS || v.business_email || '').trim();
+      const pixelId      = (v.PIXEL_ID || v.pixel_id || '').trim();
+      const edid         = (v.EDID || v.edid || '').trim();
+
+      // ── Enrichment: Social & Skills ──
+      const facebookUrl  = (v.INDIVIDUAL_FACEBOOK_URL || v.individual_facebook_url || v.facebook_url || '').trim();
+      const twitterUrl   = (v.INDIVIDUAL_TWITTER_URL || v.individual_twitter_url || v.twitter_url || '').trim();
+      const skills       = (v.SKILLS || v.skills || '').trim();
+      const alInterests  = (v.INTERESTS || v.interests_raw || v.al_interests || '').trim();
 
       // UPSERT: insert new visitor or update existing with accumulated data
       const result = await sql`
         INSERT INTO visitors (
           client_key, email, first_name, last_name, phone,
           city, state, age_range, gender, income, net_worth, linkedin,
+          address, zip, homeowner, married, children,
+          company_name, job_title, company_industry, company_size, company_revenue,
+          department, seniority_level,
+          all_emails, business_email, pixel_id, edid,
+          facebook_url, twitter_url, skills, al_interests,
           visit_count, first_visit, last_visit,
           pages_visited, referrers, processed
         ) VALUES (
           ${client_key}, ${email}, ${firstName}, ${lastName}, ${primaryPhone},
           ${city}, ${state}, ${ageRange}, ${gender}, ${income}, ${netWorth}, ${linkedin},
+          ${address}, ${zip}, ${homeowner}, ${married}, ${children},
+          ${companyName}, ${jobTitle}, ${companyIndustry}, ${companySize}, ${companyRevenue},
+          ${department}, ${seniorityLevel},
+          ${allEmails}, ${businessEmail}, ${pixelId}, ${edid},
+          ${facebookUrl}, ${twitterUrl}, ${skills}, ${alInterests},
           1, ${timestamp}::timestamptz, ${timestamp}::timestamptz,
           ${fullUrl ? JSON.stringify([fullUrl]) : '[]'}::jsonb,
           ${referrer ? JSON.stringify([referrer]) : '[]'}::jsonb,
@@ -101,6 +138,25 @@ export async function POST(request) {
             THEN visitors.referrers || ${JSON.stringify([referrer])}::jsonb
             ELSE visitors.referrers
           END,
+          -- Update enrichment fields only if they were empty before
+          address = CASE WHEN visitors.address = '' AND ${address} != '' THEN ${address} ELSE visitors.address END,
+          zip = CASE WHEN visitors.zip = '' AND ${zip} != '' THEN ${zip} ELSE visitors.zip END,
+          homeowner = CASE WHEN visitors.homeowner = '' AND ${homeowner} != '' THEN ${homeowner} ELSE visitors.homeowner END,
+          married = CASE WHEN visitors.married = '' AND ${married} != '' THEN ${married} ELSE visitors.married END,
+          children = CASE WHEN visitors.children = '' AND ${children} != '' THEN ${children} ELSE visitors.children END,
+          company_name = CASE WHEN visitors.company_name = '' AND ${companyName} != '' THEN ${companyName} ELSE visitors.company_name END,
+          job_title = CASE WHEN visitors.job_title = '' AND ${jobTitle} != '' THEN ${jobTitle} ELSE visitors.job_title END,
+          company_industry = CASE WHEN visitors.company_industry = '' AND ${companyIndustry} != '' THEN ${companyIndustry} ELSE visitors.company_industry END,
+          company_size = CASE WHEN visitors.company_size = '' AND ${companySize} != '' THEN ${companySize} ELSE visitors.company_size END,
+          company_revenue = CASE WHEN visitors.company_revenue = '' AND ${companyRevenue} != '' THEN ${companyRevenue} ELSE visitors.company_revenue END,
+          department = CASE WHEN visitors.department = '' AND ${department} != '' THEN ${department} ELSE visitors.department END,
+          seniority_level = CASE WHEN visitors.seniority_level = '' AND ${seniorityLevel} != '' THEN ${seniorityLevel} ELSE visitors.seniority_level END,
+          all_emails = CASE WHEN visitors.all_emails = '' AND ${allEmails} != '' THEN ${allEmails} ELSE visitors.all_emails END,
+          business_email = CASE WHEN visitors.business_email = '' AND ${businessEmail} != '' THEN ${businessEmail} ELSE visitors.business_email END,
+          facebook_url = CASE WHEN visitors.facebook_url = '' AND ${facebookUrl} != '' THEN ${facebookUrl} ELSE visitors.facebook_url END,
+          twitter_url = CASE WHEN visitors.twitter_url = '' AND ${twitterUrl} != '' THEN ${twitterUrl} ELSE visitors.twitter_url END,
+          skills = CASE WHEN visitors.skills = '' AND ${skills} != '' THEN ${skills} ELSE visitors.skills END,
+          al_interests = CASE WHEN visitors.al_interests = '' AND ${alInterests} != '' THEN ${alInterests} ELSE visitors.al_interests END,
           processed = FALSE
         RETURNING (xmax = 0) AS is_new
       `;

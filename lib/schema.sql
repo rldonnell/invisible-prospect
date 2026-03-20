@@ -19,6 +19,34 @@ CREATE TABLE IF NOT EXISTS visitors (
   net_worth       TEXT DEFAULT '',
   linkedin        TEXT DEFAULT '',
 
+  -- Address & Demographics (Audience Lab enrichment)
+  address         TEXT DEFAULT '',
+  zip             TEXT DEFAULT '',
+  homeowner       TEXT DEFAULT '',
+  married         TEXT DEFAULT '',
+  children        TEXT DEFAULT '',
+
+  -- Employer / B2B context
+  company_name      TEXT DEFAULT '',
+  job_title         TEXT DEFAULT '',
+  company_industry  TEXT DEFAULT '',
+  company_size      TEXT DEFAULT '',
+  company_revenue   TEXT DEFAULT '',
+  department        TEXT DEFAULT '',
+  seniority_level   TEXT DEFAULT '',
+
+  -- Additional emails & identity
+  all_emails        TEXT DEFAULT '',
+  business_email    TEXT DEFAULT '',
+  pixel_id          TEXT DEFAULT '',
+  edid              TEXT DEFAULT '',
+
+  -- Social & enrichment
+  facebook_url  TEXT DEFAULT '',
+  twitter_url   TEXT DEFAULT '',
+  skills        TEXT DEFAULT '',
+  al_interests  TEXT DEFAULT '',
+
   -- Accumulation fields (updated on each webhook hit)
   visit_count     INTEGER DEFAULT 1,
   first_visit     TIMESTAMPTZ,
