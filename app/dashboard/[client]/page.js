@@ -36,21 +36,39 @@ export default async function DashboardPage({ params, searchParams }) {
   try {
     const sql = getDb();
 
+    // Default 30-day window; override with ?days=90 or ?days=all
+    const daysParam = searchParams?.days;
+    const showAll = daysParam === 'all';
+    const days = showAll ? null : parseInt(daysParam) || 30;
+    const cutoff = days ? new Date(Date.now() - days * 86400000).toISOString().split('T')[0] : null;
+
+    // Date filter fragment — applied to all queries
+    // When cutoff is set, filter to visitors whose last_visit >= cutoff
+    const dateFilter = cutoff
+      ? sql`AND last_visit >= ${cutoff}::date`
+      : sql``;
+
     // Tier counts
     const tierRows = await sql`
       SELECT intent_tier, COUNT(*)::int as count
-      FROM visitors WHERE client_key = ${client}
+      FROM visitors WHERE client_key = ${client} ${dateFilter}
       GROUP BY intent_tier
     `;
     const tiers = { HOT: 0, High: 0, Medium: 0, Low: 0 };
     for (const r of tierRows) tiers[r.intent_tier] = r.count;
     const totalVisitors = Object.values(tiers).reduce((a, b) => a + b, 0);
 
+    // All-time totals for context
+    const [allTimeRow] = await sql`
+      SELECT COUNT(*)::int as total FROM visitors WHERE client_key = ${client}
+    `;
+    const allTimeTotal = allTimeRow?.total || totalVisitors;
+
     // Interests
     const interestRows = await sql`
       SELECT interest, COUNT(*)::int as count FROM (
         SELECT jsonb_array_elements_text(interests) as interest
-        FROM visitors WHERE client_key = ${client}
+        FROM visitors WHERE client_key = ${client} ${dateFilter}
           AND interests IS NOT NULL AND interests != '[]'::jsonb
       ) sub GROUP BY interest ORDER BY count DESC
     `;
@@ -58,11 +76,11 @@ export default async function DashboardPage({ params, searchParams }) {
     // Sources
     const sourceRows = await sql`
       SELECT COALESCE(referrer_source, 'Direct') as source, COUNT(*)::int as count
-      FROM visitors WHERE client_key = ${client}
+      FROM visitors WHERE client_key = ${client} ${dateFilter}
       GROUP BY referrer_source ORDER BY count DESC
     `;
 
-    // Top visitors
+    // Top visitors — all tiers so geo filter works across full dataset
     const topVisitors = await sql`
       SELECT id, COALESCE(first_name, '') as first_name,
         COALESCE(LEFT(last_name, 1), '') as last_initial,
@@ -73,15 +91,14 @@ export default async function DashboardPage({ params, searchParams }) {
         COALESCE(company_name, '') as company,
         COALESCE(confidence, '') as confidence,
         COALESCE(confidence_score, 0) as confidence_score
-      FROM visitors WHERE client_key = ${client}
-        AND intent_tier IN ('HOT', 'High')
-      ORDER BY intent_score DESC, last_visit DESC LIMIT 100
+      FROM visitors WHERE client_key = ${client} ${dateFilter}
+      ORDER BY intent_score DESC, last_visit DESC
     `;
 
-    // Date range
+    // Date range (within the filtered window)
     const [dateRange] = await sql`
       SELECT MIN(first_visit)::text as earliest, MAX(last_visit)::text as latest
-      FROM visitors WHERE client_key = ${client}
+      FROM visitors WHERE client_key = ${client} ${dateFilter}
     `;
 
     // Last processed
@@ -93,16 +110,26 @@ export default async function DashboardPage({ params, searchParams }) {
 
     const clientName = client.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+    // Client geo config — if set, enables the "State Only" quick filter
+    const CLIENT_GEO = {
+      'sa-spine': { code: 'TX', label: 'Texas' },
+      'az-breasts': { code: 'AZ', label: 'Arizona' },
+    };
+    const clientGeo = CLIENT_GEO[client] || null;
+
     const data = {
       clientName,
       clientKey: client,
       totalVisitors,
+      allTimeTotal,
       tiers,
       interests: interestRows,
       sources: sourceRows,
       topVisitors,
       dateRange: dateRange || {},
       lastProcessed: lastRun?.last_processed || null,
+      clientGeo,
+      dateWindow: showAll ? 'all' : days,
     };
 
     return <DashboardClient data={data} />;

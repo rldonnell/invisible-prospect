@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 
 const TIER_COLORS = {
@@ -16,21 +16,46 @@ const SOURCE_COLORS = [
   '#06b6d4', '#84cc16', '#ef4444', '#a855f7', '#22d3ee',
 ];
 
+const DATE_WINDOWS = [
+  { label: '7d', value: '7' },
+  { label: '30d', value: '30' },
+  { label: '90d', value: '90' },
+  { label: 'All', value: 'all' },
+];
+
 export default function DashboardClient({ data }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const tierChartRef = useRef(null);
   const sourceChartRef = useRef(null);
   const interestChartRef = useRef(null);
   const [chartReady, setChartReady] = useState(false);
   const [filter, setFilter] = useState('ALL');
+  const [stateFilter, setStateFilter] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
 
   const {
-    clientName, totalVisitors, tiers, interests,
+    clientName, totalVisitors, allTimeTotal, tiers, interests,
     sources, topVisitors, dateRange, lastProcessed,
+    clientGeo, dateWindow,
   } = data;
+
+  const activeDays = String(dateWindow || 30);
+
+  const switchWindow = (val) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (val === '30') {
+      params.delete('days'); // 30 is the default
+    } else {
+      params.set('days', val);
+    }
+    // Preserve any existing key param
+    const qs = params.toString();
+    router.push(`${pathname}${qs ? '?' + qs : ''}`);
+  };
 
   useEffect(() => {
     if (!chartReady || typeof Chart === 'undefined') return;
@@ -116,6 +141,10 @@ export default function DashboardClient({ data }) {
   // Filter visitors
   const filtered = topVisitors.filter(v => {
     if (filter !== 'ALL' && v.intent_tier !== filter) return false;
+    if (stateFilter && clientGeo) {
+      const vState = (v.state || '').toUpperCase().trim();
+      if (vState !== clientGeo.code) return false;
+    }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       const name = `${v.first_name} ${v.last_initial}`.toLowerCase();
@@ -151,6 +180,22 @@ export default function DashboardClient({ data }) {
             <p style={styles.subtitle}>{clientName}</p>
           </div>
           <div style={styles.headerRight}>
+            <div style={styles.dateWindowRow}>
+              {DATE_WINDOWS.map(w => (
+                <button
+                  key={w.value}
+                  onClick={() => switchWindow(w.value)}
+                  style={{
+                    ...styles.dateWindowBtn,
+                    backgroundColor: activeDays === w.value ? '#6366f1' : '#fff',
+                    color: activeDays === w.value ? '#fff' : '#64748b',
+                    borderColor: activeDays === w.value ? '#6366f1' : '#e2e8f0',
+                  }}
+                >
+                  {w.label}
+                </button>
+              ))}
+            </div>
             <div style={styles.dateRange}>
               {fmtDate(dateRange.earliest)} &mdash; {fmtDate(dateRange.latest)}
             </div>
@@ -167,6 +212,9 @@ export default function DashboardClient({ data }) {
           <div style={{ ...styles.kpiCard, borderTop: '4px solid #1e293b' }}>
             <div style={styles.kpiLabel}>Total Identified</div>
             <div style={styles.kpiValue}>{totalVisitors.toLocaleString()}</div>
+            {activeDays !== 'all' && allTimeTotal !== totalVisitors && (
+              <div style={styles.kpiSub}>{allTimeTotal.toLocaleString()} all-time</div>
+            )}
           </div>
           <div style={{ ...styles.kpiCard, borderTop: `4px solid ${TIER_COLORS.HOT}` }}>
             <div style={styles.kpiLabel}>HOT</div>
@@ -234,7 +282,22 @@ export default function DashboardClient({ data }) {
                 <option value="ALL">All Tiers</option>
                 <option value="HOT">HOT Only</option>
                 <option value="High">High Only</option>
+                <option value="Medium">Medium Only</option>
+                <option value="Low">Low Only</option>
               </select>
+              {clientGeo && (
+                <button
+                  onClick={() => { setStateFilter(!stateFilter); setCurrentPage(1); }}
+                  style={{
+                    ...styles.stateBtn,
+                    backgroundColor: stateFilter ? '#6366f1' : '#fff',
+                    color: stateFilter ? '#fff' : '#334155',
+                    borderColor: stateFilter ? '#6366f1' : '#e2e8f0',
+                  }}
+                >
+                  {stateFilter ? `${clientGeo.label} Only` : `${clientGeo.label}`}
+                </button>
+              )}
             </div>
           </div>
 
@@ -312,7 +375,7 @@ export default function DashboardClient({ data }) {
                 Previous
               </button>
               <span style={styles.pageInfo}>
-                Page {currentPage} of {totalPages} ({filtered.length} visitors)
+                Page {currentPage} of {totalPages} ({filtered.length} visitors{stateFilter && clientGeo ? ` in ${clientGeo.label}` : ''})
               </span>
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
@@ -376,7 +439,17 @@ const styles = {
     color: '#64748b',
     marginTop: 4,
   },
-  headerRight: { textAlign: 'right' },
+  headerRight: { textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 },
+  dateWindowRow: { display: 'flex', gap: 4, marginBottom: 4 },
+  dateWindowBtn: {
+    padding: '5px 12px',
+    borderRadius: 6,
+    border: '1px solid #e2e8f0',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
   dateRange: { fontSize: 14, fontWeight: 600, color: '#334155' },
   lastUpdated: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
   kpiRow: {
@@ -422,7 +495,17 @@ const styles = {
     gap: 12,
     marginBottom: 16,
   },
-  tableControls: { display: 'flex', gap: 10 },
+  tableControls: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
+  stateBtn: {
+    padding: '8px 16px',
+    borderRadius: 8,
+    border: '2px solid #e2e8f0',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    whiteSpace: 'nowrap',
+  },
   searchInput: {
     padding: '8px 14px',
     borderRadius: 8,
