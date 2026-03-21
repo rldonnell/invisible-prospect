@@ -105,6 +105,10 @@ export default async function DashboardPage({ params, searchParams }) {
       ORDER BY completed_at DESC LIMIT 1
     `;
 
+    // Friendly display names
+    const CLIENT_NAMES = {
+      'demo': 'Demo Practice (Anonymized)',
+    };
     const clientName = CLIENT_NAMES[client] || client.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     // Client geo config — if set, enables the "State Only" quick filter
@@ -112,11 +116,6 @@ export default async function DashboardPage({ params, searchParams }) {
       'sa-spine': { code: 'TX', label: 'Texas' },
       'az-breasts': { code: 'AZ', label: 'Arizona' },
       'demo': { code: 'TX', label: 'Texas' },
-    };
-
-    // Friendly display names
-    const CLIENT_NAMES = {
-      'demo': 'Demo Practice (Anonymized)',
     };
     const clientGeo = CLIENT_GEO[client] || null;
 
