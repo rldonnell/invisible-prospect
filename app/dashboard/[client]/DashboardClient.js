@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import Script from 'next/script';
 
 const TIER_COLORS = {
@@ -25,8 +25,6 @@ const DATE_WINDOWS = [
 
 export default function DashboardClient({ data }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const tierChartRef = useRef(null);
   const sourceChartRef = useRef(null);
   const interestChartRef = useRef(null);
@@ -45,16 +43,10 @@ export default function DashboardClient({ data }) {
 
   const activeDays = String(dateWindow || 30);
 
-  const switchWindow = (val) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (val === '30') {
-      params.delete('days'); // 30 is the default
-    } else {
-      params.set('days', val);
-    }
-    // Preserve any existing key param
-    const qs = params.toString();
-    router.push(`${pathname}${qs ? '?' + qs : ''}`);
+  // Build URL for date window links (plain <a> tags — no useSearchParams needed)
+  const windowHref = (val) => {
+    if (val === '30') return pathname;
+    return `${pathname}?days=${val}`;
   };
 
   useEffect(() => {
@@ -182,18 +174,19 @@ export default function DashboardClient({ data }) {
           <div style={styles.headerRight}>
             <div style={styles.dateWindowRow}>
               {DATE_WINDOWS.map(w => (
-                <button
+                <a
                   key={w.value}
-                  onClick={() => switchWindow(w.value)}
+                  href={windowHref(w.value)}
                   style={{
                     ...styles.dateWindowBtn,
                     backgroundColor: activeDays === w.value ? '#6366f1' : '#fff',
                     color: activeDays === w.value ? '#fff' : '#64748b',
                     borderColor: activeDays === w.value ? '#6366f1' : '#e2e8f0',
+                    textDecoration: 'none',
                   }}
                 >
                   {w.label}
-                </button>
+                </a>
               ))}
             </div>
             <div style={styles.dateRange}>
