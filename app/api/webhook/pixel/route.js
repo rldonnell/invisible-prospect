@@ -4,6 +4,9 @@ import { getDb } from '../../../../lib/db';
  * POST /api/webhook/pixel
  *
  * Receives pixel visitor data via webhook and upserts into Neon Postgres.
+ * Deduplicates on HEM_SHA256 (identity hash) — NOT email address.
+ * This ensures visitors with multiple emails are consolidated into one record.
+ *
  * Supports two formats:
  *
  * 1. Single visitor event (real-time webhook from pixel platform):
@@ -43,16 +46,24 @@ export async function POST(request) {
     let skipped = 0;
 
     for (const v of visitorList) {
-      // ── Primary email (dedup key) ──
+      // ── HEM SHA256 (primary dedup key) ──
+      const hemSha256 = (v.HEM_SHA256 || v.hem_sha256 || '').trim();
+
+      // ── Email (stored for contact, but NOT used for dedup) ──
       const rawEmail = v.PERSONAL_VERIFIED_EMAILS || v.personal_verified_emails || v.email || '';
       const email = rawEmail.includes(',')
         ? rawEmail.split(',')[0].trim().toLowerCase()
         : rawEmail.trim().toLowerCase();
 
-      if (!email || !email.includes('@')) {
+      // Must have either HEM hash or email — HEM preferred
+      if (!hemSha256 && (!email || !email.includes('@'))) {
         skipped++;
         continue;
       }
+
+      // If no HEM hash provided, generate a simple one from email
+      // This ensures backwards compatibility with non-Audience-Lab sources
+      const dedupKey = hemSha256 || `email:${email}`;
 
       // ── Core fields ──
       const fullUrl    = v.FULL_URL || v.full_url || '';
@@ -100,10 +111,10 @@ export async function POST(request) {
       const skills       = (v.SKILLS || v.skills || '').trim();
       const alInterests  = (v.INTERESTS || v.interests_raw || v.al_interests || '').trim();
 
-      // UPSERT: insert new visitor or update existing with accumulated data
+      // UPSERT: dedup on HEM SHA256, NOT email
       const result = await sql`
         INSERT INTO visitors (
-          client_key, email, first_name, last_name, phone,
+          client_key, hem_sha256, email, first_name, last_name, phone,
           city, state, age_range, gender, income, net_worth, linkedin,
           address, zip, homeowner, married, children,
           company_name, job_title, company_industry, company_size, company_revenue,
@@ -113,7 +124,7 @@ export async function POST(request) {
           visit_count, first_visit, last_visit,
           pages_visited, referrers, processed
         ) VALUES (
-          ${client_key}, ${email}, ${firstName}, ${lastName}, ${primaryPhone},
+          ${client_key}, ${dedupKey}, ${email}, ${firstName}, ${lastName}, ${primaryPhone},
           ${city}, ${state}, ${ageRange}, ${gender}, ${income}, ${netWorth}, ${linkedin},
           ${address}, ${zip}, ${homeowner}, ${married}, ${children},
           ${companyName}, ${jobTitle}, ${companyIndustry}, ${companySize}, ${companyRevenue},
@@ -125,7 +136,7 @@ export async function POST(request) {
           ${referrer ? JSON.stringify([referrer]) : '[]'}::jsonb,
           FALSE
         )
-        ON CONFLICT (client_key, email) DO UPDATE SET
+        ON CONFLICT (client_key, hem_sha256) DO UPDATE SET
           visit_count = visitors.visit_count + 1,
           last_visit = GREATEST(visitors.last_visit, ${timestamp}::timestamptz),
           pages_visited = CASE
@@ -138,7 +149,12 @@ export async function POST(request) {
             THEN visitors.referrers || ${JSON.stringify([referrer])}::jsonb
             ELSE visitors.referrers
           END,
+          -- Update email if we get a better one (non-empty replacing empty)
+          email = CASE WHEN visitors.email = '' AND ${email} != '' THEN ${email} ELSE visitors.email END,
           -- Update enrichment fields only if they were empty before
+          first_name = CASE WHEN visitors.first_name = '' AND ${firstName} != '' THEN ${firstName} ELSE visitors.first_name END,
+          last_name = CASE WHEN visitors.last_name = '' AND ${lastName} != '' THEN ${lastName} ELSE visitors.last_name END,
+          phone = CASE WHEN visitors.phone = '' AND ${primaryPhone} != '' THEN ${primaryPhone} ELSE visitors.phone END,
           address = CASE WHEN visitors.address = '' AND ${address} != '' THEN ${address} ELSE visitors.address END,
           zip = CASE WHEN visitors.zip = '' AND ${zip} != '' THEN ${zip} ELSE visitors.zip END,
           homeowner = CASE WHEN visitors.homeowner = '' AND ${homeowner} != '' THEN ${homeowner} ELSE visitors.homeowner END,

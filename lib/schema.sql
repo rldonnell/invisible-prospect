@@ -7,7 +7,8 @@
 CREATE TABLE IF NOT EXISTS visitors (
   id              SERIAL PRIMARY KEY,
   client_key      TEXT NOT NULL,
-  email           TEXT NOT NULL,
+  hem_sha256      TEXT NOT NULL DEFAULT '',
+  email           TEXT DEFAULT '',
   first_name      TEXT DEFAULT '',
   last_name       TEXT DEFAULT '',
   phone           TEXT DEFAULT '',
@@ -72,8 +73,8 @@ CREATE TABLE IF NOT EXISTS visitors (
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW(),
 
-  -- Unique constraint: one record per email per client
-  UNIQUE(client_key, email)
+  -- Unique constraint: one record per HEM identity hash per client
+  UNIQUE(client_key, hem_sha256)
 );
 
 -- Indexes for common query patterns
