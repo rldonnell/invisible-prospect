@@ -66,7 +66,33 @@ function buildCustomFields(visitor) {
   if (visitor.company_name) fields.push({ key: 'pixel_company', field_value: visitor.company_name });
   if (visitor.job_title) fields.push({ key: 'pixel_job_title', field_value: visitor.job_title });
   if (visitor.company_industry) fields.push({ key: 'pixel_industry', field_value: visitor.company_industry });
+  if (visitor.confidence) fields.push({ key: 'pixel_confidence', field_value: visitor.confidence });
+  if (visitor.confidence_score) fields.push({ key: 'pixel_confidence_score', field_value: String(visitor.confidence_score) });
   return fields;
+}
+
+function buildTags(visitor) {
+  // Always tag with "Visitor ID" so GHL can filter pixel-identified contacts
+  const tags = ['Visitor ID'];
+
+  // Tier tag — this drives GHL workflow triggers
+  if (visitor.intent_tier) {
+    tags.push(visitor.intent_tier); // "HOT", "High", or "Medium"
+  }
+
+  // Confidence tag if available
+  if (visitor.confidence) {
+    tags.push(`Confidence: ${visitor.confidence}`);
+  }
+
+  // Append any system-generated tags (conditions, interests)
+  if (Array.isArray(visitor.tags)) {
+    for (const t of visitor.tags) {
+      if (!tags.includes(t)) tags.push(t);
+    }
+  }
+
+  return tags;
 }
 
 async function createContact(visitor, locationId) {
@@ -82,7 +108,7 @@ async function createContact(visitor, locationId) {
       city: visitor.city,
       state: visitor.state,
       postalCode: visitor.zip || '',
-      tags: visitor.tags || [],
+      tags: buildTags(visitor),
       customFields: buildCustomFields(visitor),
       source: 'P5 Pixel Intelligence',
     }),
@@ -94,11 +120,14 @@ async function updateContact(contactId, visitor, locationId) {
     method: 'PUT',
     body: JSON.stringify({
       locationId,
-      tags: visitor.tags || [],
+      tags: buildTags(visitor),
       customFields: buildCustomFields(visitor),
     }),
   });
 }
+
+// Allow up to 60 seconds per invocation (Vercel Pro)
+export const maxDuration = 60;
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization');
@@ -110,6 +139,8 @@ export async function GET(request) {
     const sql = getDb();
     const { searchParams } = new URL(request.url);
     const singleClient = searchParams.get('client');
+    // Batch size — process this many per call to stay within Vercel timeout
+    const batchSize = parseInt(searchParams.get('limit')) || 25;
 
     const activeClients = singleClient
       ? [singleClient]
@@ -132,6 +163,14 @@ export async function GET(request) {
         continue;
       }
 
+      // Count total remaining before we start
+      const [remaining] = await sql`
+        SELECT COUNT(*)::int as count FROM visitors
+        WHERE client_key = ${clientKey}
+          AND processed = TRUE AND ghl_pushed = FALSE
+          AND intent_tier IN ('HOT', 'High', 'Medium')
+      `;
+
       // Log the push run
       const [run] = await sql`
         INSERT INTO processing_runs (client_key, run_type)
@@ -139,7 +178,7 @@ export async function GET(request) {
         RETURNING id
       `;
 
-      // Query processed visitors that haven't been pushed yet
+      // Query a BATCH of processed visitors that haven't been pushed yet
       // Only push Medium+ tier (skip Low to reduce noise)
       const toPush = await sql`
         SELECT id, email, first_name, last_name, phone,
@@ -147,13 +186,15 @@ export async function GET(request) {
                age_range, gender, income, net_worth, homeowner, married, children,
                company_name, job_title, company_industry, department, seniority_level,
                intent_score, intent_tier, interests,
-               referrer_source, tags
+               referrer_source, tags,
+               confidence, confidence_score
         FROM visitors
         WHERE client_key = ${clientKey}
           AND processed = TRUE
           AND ghl_pushed = FALSE
           AND intent_tier IN ('HOT', 'High', 'Medium')
         ORDER BY intent_score DESC
+        LIMIT ${batchSize}
       `;
 
       let created = 0;
@@ -162,6 +203,15 @@ export async function GET(request) {
 
       for (const visitor of toPush) {
         try {
+          // Skip visitors with no email — GHL requires email to create/find contacts
+          if (!visitor.email) {
+            await sql`
+              UPDATE visitors SET ghl_pushed = TRUE, ghl_pushed_at = NOW()
+              WHERE id = ${visitor.id}
+            `;
+            continue;
+          }
+
           const existing = await findContact(visitor.email, locationId);
 
           let ghlContactId = null;
@@ -187,11 +237,19 @@ export async function GET(request) {
         } catch (pushError) {
           console.error(`GHL push failed for ${visitor.email}:`, pushError.message);
           errors++;
+
+          // If we get a rate limit error, stop this batch
+          if (pushError.message.includes('429') || pushError.message.includes('rate')) {
+            console.warn('Rate limited — stopping batch early');
+            break;
+          }
         }
 
         // Rate limit: pace at ~50 requests/min
         await new Promise(resolve => setTimeout(resolve, 1200));
       }
+
+      const remainingAfter = remaining.count - (created + updated);
 
       // Update run log
       await sql`
@@ -200,14 +258,21 @@ export async function GET(request) {
           total_visitors = ${toPush.length},
           processed = ${created + updated},
           errors = ${errors},
-          details = ${JSON.stringify({ created, updated })}::jsonb
+          details = ${JSON.stringify({ created, updated, remaining: Math.max(0, remainingAfter) })}::jsonb
         WHERE id = ${run.id}
       `;
 
-      results[clientKey] = { queued: toPush.length, created, updated, errors };
+      results[clientKey] = {
+        batch: toPush.length,
+        created,
+        updated,
+        errors,
+        remaining: Math.max(0, remainingAfter),
+        done: remainingAfter <= 0,
+      };
     }
 
-    console.log('GHL push complete:', JSON.stringify(results));
+    console.log('GHL push batch complete:', JSON.stringify(results));
     return Response.json({ success: true, results });
 
   } catch (error) {
