@@ -201,6 +201,8 @@ export async function GET(request) {
       let created = 0;
       let updated = 0;
       let errors = 0;
+      let skipped = 0;
+      const errorDetails = [];
 
       for (const visitor of toPush) {
         try {
@@ -210,6 +212,7 @@ export async function GET(request) {
               UPDATE visitors SET ghl_pushed = TRUE, ghl_pushed_at = NOW()
               WHERE id = ${visitor.id}
             `;
+            skipped++;
             continue;
           }
 
@@ -238,6 +241,11 @@ export async function GET(request) {
         } catch (pushError) {
           console.error(`GHL push failed for ${visitor.email}:`, pushError.message);
           errors++;
+          errorDetails.push({
+            email: visitor.email || '(no email)',
+            id: visitor.id,
+            error: pushError.message.slice(0, 300),
+          });
 
           // If we get a rate limit error, stop this batch
           if (pushError.message.includes('429') || pushError.message.includes('rate')) {
@@ -267,7 +275,9 @@ export async function GET(request) {
         batch: toPush.length,
         created,
         updated,
+        skipped,
         errors,
+        errorDetails: errorDetails.length > 0 ? errorDetails : undefined,
         remaining: Math.max(0, remainingAfter),
         done: remainingAfter <= 0,
       };
