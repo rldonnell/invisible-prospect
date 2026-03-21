@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import Script from 'next/script';
 
 const TIER_COLORS = {
@@ -16,6 +17,7 @@ const SOURCE_COLORS = [
 ];
 
 export default function DashboardClient({ data }) {
+  const pathname = usePathname();
   const tierChartRef = useRef(null);
   const sourceChartRef = useRef(null);
   const interestChartRef = useRef(null);
@@ -253,7 +255,11 @@ export default function DashboardClient({ data }) {
               <tbody>
                 {paginated.map((v, i) => (
                   <tr key={v.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                    <td style={styles.td}>{v.first_name} {v.last_initial}.</td>
+                    <td style={styles.td}>
+                      <a href={`${pathname}/visitor/${v.id}`} style={styles.nameLink}>
+                        {v.first_name} {v.last_initial}.
+                      </a>
+                    </td>
                     <td style={styles.td}>{[v.city, v.state].filter(Boolean).join(', ') || '-'}</td>
                     <td style={{ ...styles.td, fontWeight: 600 }}>{v.intent_score}</td>
                     <td style={styles.td}>
@@ -435,6 +441,7 @@ const styles = {
     whiteSpace: 'nowrap',
   },
   td: { padding: '10px 12px', borderBottom: '1px solid #f1f5f9' },
+  nameLink: { color: '#6366f1', textDecoration: 'none', fontWeight: 600 },
   trEven: { backgroundColor: '#fff' },
   trOdd: { backgroundColor: '#f8fafc' },
   tierBadge: {
