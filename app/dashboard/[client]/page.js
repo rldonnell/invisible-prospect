@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { getDb } from '../../../lib/db';
 import DashboardClient from './DashboardClient';
 
@@ -129,7 +130,11 @@ export default async function DashboardPage({ params, searchParams }) {
       dateWindow: showAll ? 'all' : days,
     };
 
-    return <DashboardClient data={data} />;
+    return (
+      <Suspense fallback={<div style={{ padding: '60px', textAlign: 'center', fontFamily: 'system-ui', color: '#999' }}>Loading dashboard...</div>}>
+        <DashboardClient data={data} />
+      </Suspense>
+    );
 
   } catch (error) {
     return (
