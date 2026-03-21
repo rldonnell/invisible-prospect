@@ -1,6 +1,10 @@
 import { getDb } from '../../../lib/db';
 import DashboardClient from './DashboardClient';
 
+// Force fresh data on every request — no Vercel caching
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 /**
  * /dashboard/[client]
  *
