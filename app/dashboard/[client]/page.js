@@ -49,7 +49,7 @@ export default async function DashboardPage({ params, searchParams }) {
     // Tier counts
     const tierRows = await sql`
       SELECT intent_tier, COUNT(*)::int as count
-      FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
+      FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
       GROUP BY intent_tier
     `;
     const tiers = { HOT: 0, High: 0, Medium: 0, Low: 0 };
@@ -66,7 +66,7 @@ export default async function DashboardPage({ params, searchParams }) {
     const interestRows = await sql`
       SELECT interest, COUNT(*)::int as count FROM (
         SELECT jsonb_array_elements_text(interests) as interest
-        FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
+        FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
           AND interests IS NOT NULL AND interests != '[]'::jsonb
       ) sub GROUP BY interest ORDER BY count DESC
     `;
@@ -74,7 +74,7 @@ export default async function DashboardPage({ params, searchParams }) {
     // Sources
     const sourceRows = await sql`
       SELECT COALESCE(referrer_source, 'Direct') as source, COUNT(*)::int as count
-      FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
+      FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
       GROUP BY referrer_source ORDER BY count DESC
     `;
 
@@ -89,14 +89,14 @@ export default async function DashboardPage({ params, searchParams }) {
         COALESCE(company_name, '') as company,
         COALESCE(confidence, '') as confidence,
         COALESCE(confidence_score, 0) as confidence_score
-      FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
+      FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
       ORDER BY intent_score DESC, last_visit DESC
     `;
 
     // Date range (within the filtered window)
     const [dateRange] = await sql`
       SELECT MIN(first_visit)::text as earliest, MAX(last_visit)::text as latest
-      FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
+      FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
     `;
 
     // Last processed
