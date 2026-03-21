@@ -149,11 +149,20 @@ export async function GET(request) {
 
     const defaultLocationId = process.env.GHL_LOCATION_ID;
 
-    if (!process.env.GHL_API_KEY) {
+    const apiKeyRaw = process.env.GHL_API_KEY || '';
+    if (!apiKeyRaw) {
       return Response.json({ error: 'GHL_API_KEY not configured' }, { status: 400 });
     }
 
-    const results = {};
+    // Debug: show key info to diagnose auth issues (first 8 chars only)
+    const keyDebug = {
+      length: apiKeyRaw.length,
+      prefix: apiKeyRaw.slice(0, 8),
+      hasWhitespace: apiKeyRaw !== apiKeyRaw.trim(),
+      hasQuotes: apiKeyRaw.includes('"') || apiKeyRaw.includes("'"),
+    };
+
+    const results = { _keyDebug: keyDebug };
 
     for (const clientKey of activeClients) {
       const envKey = `GHL_LOCATION_${clientKey.replace(/-/g, '_').toUpperCase()}`;
