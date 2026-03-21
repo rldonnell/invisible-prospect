@@ -154,15 +154,7 @@ export async function GET(request) {
       return Response.json({ error: 'GHL_API_KEY not configured' }, { status: 400 });
     }
 
-    // Debug: show key info to diagnose auth issues (first 8 chars only)
-    const keyDebug = {
-      length: apiKeyRaw.length,
-      prefix: apiKeyRaw.slice(0, 8),
-      hasWhitespace: apiKeyRaw !== apiKeyRaw.trim(),
-      hasQuotes: apiKeyRaw.includes('"') || apiKeyRaw.includes("'"),
-    };
-
-    const results = { _keyDebug: keyDebug };
+    const results = {};
 
     for (const clientKey of activeClients) {
       const envKey = `GHL_LOCATION_${clientKey.replace(/-/g, '_').toUpperCase()}`;
