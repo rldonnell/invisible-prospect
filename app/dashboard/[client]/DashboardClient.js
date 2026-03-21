@@ -30,7 +30,6 @@ export default function DashboardClient({ data }) {
   const interestChartRef = useRef(null);
   const [chartReady, setChartReady] = useState(false);
   const [filter, setFilter] = useState('ALL');
-  const [stateFilter, setStateFilter] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 20;
@@ -38,16 +37,29 @@ export default function DashboardClient({ data }) {
   const {
     clientName, totalVisitors, allTimeTotal, tiers, interests,
     sources, topVisitors, dateRange, lastProcessed,
-    clientGeo, dateWindow,
+    clientGeo, dateWindow, activeState,
   } = data;
 
   const activeDays = String(dateWindow || 30);
 
-  // Build URL for date window links (plain <a> tags — no useSearchParams needed)
-  const windowHref = (val) => {
-    if (val === '30') return pathname;
-    return `${pathname}?days=${val}`;
+  // Build URLs preserving existing params
+  const buildHref = (overrides = {}) => {
+    const params = {};
+    // Keep current date window
+    if (activeDays !== '30') params.days = activeDays;
+    // Keep current state filter
+    if (activeState) params.state = activeState;
+    // Apply overrides
+    Object.assign(params, overrides);
+    // Clean up defaults
+    if (params.days === '30') delete params.days;
+    if (params.state === '') delete params.state;
+    const qs = new URLSearchParams(params).toString();
+    return `${pathname}${qs ? '?' + qs : ''}`;
   };
+
+  const windowHref = (val) => buildHref({ days: val === '30' ? undefined : val });
+  const stateHref = (stateCode) => buildHref({ state: activeState ? '' : stateCode });
 
   useEffect(() => {
     if (!chartReady || typeof Chart === 'undefined') return;
@@ -130,13 +142,9 @@ export default function DashboardClient({ data }) {
     }
   }, [chartReady, tiers, sources, interests]);
 
-  // Filter visitors
+  // Filter visitors (state already filtered server-side, just tier + search here)
   const filtered = topVisitors.filter(v => {
     if (filter !== 'ALL' && v.intent_tier !== filter) return false;
-    if (stateFilter && clientGeo) {
-      const vState = (v.state || '').toUpperCase().trim();
-      if (vState !== clientGeo.code) return false;
-    }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       const name = `${v.first_name} ${v.last_initial}`.toLowerCase();
@@ -188,6 +196,23 @@ export default function DashboardClient({ data }) {
                   {w.label}
                 </a>
               ))}
+              {clientGeo && (
+                <>
+                  <span style={{ color: '#e2e8f0', fontSize: 16, margin: '0 2px' }}>|</span>
+                  <a
+                    href={stateHref(clientGeo.code)}
+                    style={{
+                      ...styles.dateWindowBtn,
+                      backgroundColor: activeState ? '#16a34a' : '#fff',
+                      color: activeState ? '#fff' : '#64748b',
+                      borderColor: activeState ? '#16a34a' : '#e2e8f0',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    {activeState ? `${clientGeo.label} Only` : clientGeo.label}
+                  </a>
+                </>
+              )}
             </div>
             <div style={styles.dateRange}>
               {fmtDate(dateRange.earliest)} &mdash; {fmtDate(dateRange.latest)}
@@ -278,19 +303,6 @@ export default function DashboardClient({ data }) {
                 <option value="Medium">Medium Only</option>
                 <option value="Low">Low Only</option>
               </select>
-              {clientGeo && (
-                <button
-                  onClick={() => { setStateFilter(!stateFilter); setCurrentPage(1); }}
-                  style={{
-                    ...styles.stateBtn,
-                    backgroundColor: stateFilter ? '#6366f1' : '#fff',
-                    color: stateFilter ? '#fff' : '#334155',
-                    borderColor: stateFilter ? '#6366f1' : '#e2e8f0',
-                  }}
-                >
-                  {stateFilter ? `${clientGeo.label} Only` : `${clientGeo.label}`}
-                </button>
-              )}
             </div>
           </div>
 
@@ -368,7 +380,7 @@ export default function DashboardClient({ data }) {
                 Previous
               </button>
               <span style={styles.pageInfo}>
-                Page {currentPage} of {totalPages} ({filtered.length} visitors{stateFilter && clientGeo ? ` in ${clientGeo.label}` : ''})
+                Page {currentPage} of {totalPages} ({filtered.length} visitors{activeState && clientGeo ? ` in ${clientGeo.label}` : ''})
               </span>
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
