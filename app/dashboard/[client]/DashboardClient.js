@@ -147,10 +147,11 @@ export default function DashboardClient({ data }) {
     if (filter !== 'ALL' && v.intent_tier !== filter) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      const name = `${v.first_name} ${v.last_initial}`.toLowerCase();
+      const fullName = `${v.first_name} ${v.last_name}`.toLowerCase();
       const loc = `${v.city} ${v.state}`.toLowerCase();
       const ints = (v.interests || []).join(' ').toLowerCase();
-      return name.includes(term) || loc.includes(term) || ints.includes(term);
+      const email = (v.email || '').toLowerCase();
+      return fullName.includes(term) || loc.includes(term) || ints.includes(term) || email.includes(term);
     }
     return true;
   });

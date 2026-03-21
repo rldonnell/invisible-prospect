@@ -107,10 +107,13 @@ export default async function DashboardPage({ params, searchParams }) {
         `;
 
     // Top visitors — all tiers so filters work across full dataset
+    // Include last_name and email for search (display still uses initial only)
     const topVisitors = filterByState
       ? await sql`
           SELECT id, COALESCE(first_name, '') as first_name,
+            COALESCE(last_name, '') as last_name,
             COALESCE(LEFT(last_name, 1), '') as last_initial,
+            COALESCE(email, '') as email,
             COALESCE(city, '') as city, COALESCE(state, '') as state,
             intent_score, intent_tier, interests, referrer_source,
             visit_count, last_visit::text as last_visit,
@@ -124,7 +127,9 @@ export default async function DashboardPage({ params, searchParams }) {
         `
       : await sql`
           SELECT id, COALESCE(first_name, '') as first_name,
+            COALESCE(last_name, '') as last_name,
             COALESCE(LEFT(last_name, 1), '') as last_initial,
+            COALESCE(email, '') as email,
             COALESCE(city, '') as city, COALESCE(state, '') as state,
             intent_score, intent_tier, interests, referrer_source,
             visit_count, last_visit::text as last_visit,
