@@ -40,18 +40,15 @@ export default async function DashboardPage({ params, searchParams }) {
     const daysParam = searchParams?.days;
     const showAll = daysParam === 'all';
     const days = showAll ? null : parseInt(daysParam) || 30;
-    const cutoff = days ? new Date(Date.now() - days * 86400000).toISOString().split('T')[0] : null;
-
-    // Date filter fragment — applied to all queries
-    // When cutoff is set, filter to visitors whose last_visit >= cutoff
-    const dateFilter = cutoff
-      ? sql`AND last_visit >= ${cutoff}::date`
-      : sql``;
+    // Use a far-past date when "all" so every query keeps the same shape
+    const cutoff = days
+      ? new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+      : '2000-01-01';
 
     // Tier counts
     const tierRows = await sql`
       SELECT intent_tier, COUNT(*)::int as count
-      FROM visitors WHERE client_key = ${client} ${dateFilter}
+      FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
       GROUP BY intent_tier
     `;
     const tiers = { HOT: 0, High: 0, Medium: 0, Low: 0 };
@@ -68,7 +65,7 @@ export default async function DashboardPage({ params, searchParams }) {
     const interestRows = await sql`
       SELECT interest, COUNT(*)::int as count FROM (
         SELECT jsonb_array_elements_text(interests) as interest
-        FROM visitors WHERE client_key = ${client} ${dateFilter}
+        FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
           AND interests IS NOT NULL AND interests != '[]'::jsonb
       ) sub GROUP BY interest ORDER BY count DESC
     `;
@@ -76,7 +73,7 @@ export default async function DashboardPage({ params, searchParams }) {
     // Sources
     const sourceRows = await sql`
       SELECT COALESCE(referrer_source, 'Direct') as source, COUNT(*)::int as count
-      FROM visitors WHERE client_key = ${client} ${dateFilter}
+      FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
       GROUP BY referrer_source ORDER BY count DESC
     `;
 
@@ -91,14 +88,14 @@ export default async function DashboardPage({ params, searchParams }) {
         COALESCE(company_name, '') as company,
         COALESCE(confidence, '') as confidence,
         COALESCE(confidence_score, 0) as confidence_score
-      FROM visitors WHERE client_key = ${client} ${dateFilter}
+      FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
       ORDER BY intent_score DESC, last_visit DESC
     `;
 
     // Date range (within the filtered window)
     const [dateRange] = await sql`
       SELECT MIN(first_visit)::text as earliest, MAX(last_visit)::text as latest
-      FROM visitors WHERE client_key = ${client} ${dateFilter}
+      FROM visitors WHERE client_key = ${client} AND last_visit >= ${cutoff}::date
     `;
 
     // Last processed
