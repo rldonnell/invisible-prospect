@@ -246,6 +246,7 @@ export default function DashboardClient({ data }) {
                   <th style={styles.th}>Location</th>
                   <th style={styles.th}>Score</th>
                   <th style={styles.th}>Tier</th>
+                  <th style={styles.th}>Confidence</th>
                   <th style={styles.th}>Interests</th>
                   <th style={styles.th}>Source</th>
                   <th style={styles.th}>Visits</th>
@@ -270,6 +271,17 @@ export default function DashboardClient({ data }) {
                         {v.intent_tier}
                       </span>
                     </td>
+                    <td style={styles.td}>
+                      {v.confidence ? (
+                        <span style={{
+                          ...styles.tierBadge,
+                          backgroundColor: v.confidence === 'High' ? '#16a34a' : v.confidence === 'Medium' ? '#d97706' : '#dc2626',
+                          fontSize: 10,
+                        }}>
+                          {v.confidence}
+                        </span>
+                      ) : '-'}
+                    </td>
                     <td style={{ ...styles.td, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {(v.interests || []).join(', ') || '-'}
                     </td>
@@ -280,7 +292,7 @@ export default function DashboardClient({ data }) {
                 ))}
                 {paginated.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ ...styles.td, textAlign: 'center', color: '#999' }}>
+                    <td colSpan={9} style={{ ...styles.td, textAlign: 'center', color: '#999' }}>
                       No visitors match this filter.
                     </td>
                   </tr>

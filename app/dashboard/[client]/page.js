@@ -70,7 +70,9 @@ export default async function DashboardPage({ params, searchParams }) {
         intent_score, intent_tier, interests, referrer_source,
         visit_count, last_visit::text as last_visit,
         COALESCE(age_range, '') as age_range,
-        COALESCE(company_name, '') as company
+        COALESCE(company_name, '') as company,
+        COALESCE(confidence, '') as confidence,
+        COALESCE(confidence_score, 0) as confidence_score
       FROM visitors WHERE client_key = ${client}
         AND intent_tier IN ('HOT', 'High')
       ORDER BY intent_score DESC, last_visit DESC LIMIT 100

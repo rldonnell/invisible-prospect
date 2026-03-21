@@ -13,6 +13,10 @@ export default function VisitorProfile({ visitor, clientKey }) {
   const location = [v.address, v.city, v.state, v.zip].filter(Boolean).join(', ') || 'Unknown';
   const tierColor = TIER_COLORS[v.intent_tier] || '#94a3b8';
 
+  const CONFIDENCE_COLORS = { High: '#16a34a', Medium: '#d97706', Low: '#dc2626' };
+  const confidenceColor = CONFIDENCE_COLORS[v.confidence] || '#94a3b8';
+  const confidenceFlags = v.confidence_flags || [];
+
   const fmtDate = (d) => {
     if (!d) return '-';
     try {
@@ -67,10 +71,17 @@ export default function VisitorProfile({ visitor, clientKey }) {
           </div>
         </div>
         <div style={styles.headerRight}>
-          <div style={{ ...styles.scoreBadge, backgroundColor: tierColor }}>
-            {v.intent_tier}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div style={{ ...styles.scoreBadge, backgroundColor: tierColor }}>
+              {v.intent_tier}
+            </div>
+            {v.confidence && (
+              <div style={{ ...styles.scoreBadge, backgroundColor: confidenceColor }}>
+                {v.confidence} Confidence
+              </div>
+            )}
           </div>
-          <div style={styles.scoreNumber}>Score: {v.intent_score}</div>
+          <div style={styles.scoreNumber}>Intent: {v.intent_score} | Confidence: {v.confidence_score || '-'}</div>
           <div style={styles.visits}>{v.visit_count} visit{v.visit_count !== 1 ? 's' : ''}</div>
         </div>
       </div>
@@ -209,6 +220,48 @@ export default function VisitorProfile({ visitor, clientKey }) {
               </div>
             </div>
           </div>
+
+          {/* Confidence Assessment */}
+          {v.confidence && (
+            <div style={{ ...styles.card, borderLeft: `4px solid ${confidenceColor}` }}>
+              <h2 style={styles.sectionTitle}>Identity Confidence</h2>
+              <div style={styles.intentGrid}>
+                <div style={styles.intentItem}>
+                  <div style={styles.intentLabel}>Score</div>
+                  <div style={{ ...styles.intentValue, color: confidenceColor, fontSize: 32 }}>
+                    {v.confidence_score}
+                  </div>
+                </div>
+                <div style={styles.intentItem}>
+                  <div style={styles.intentLabel}>Level</div>
+                  <div style={{ ...styles.intentValue, color: confidenceColor }}>
+                    {v.confidence}
+                  </div>
+                </div>
+              </div>
+              {confidenceFlags.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
+                    Signals
+                  </div>
+                  <div style={styles.tagWrap}>
+                    {confidenceFlags.map((flag, i) => {
+                      const isPositive = ['name-matches-email', 'multi-page-depth', 'has-enrichment', 'in-market', 'phone-matches-state'].includes(flag);
+                      return (
+                        <span key={i} style={{
+                          ...styles.systemTag,
+                          backgroundColor: isPositive ? '#dcfce7' : '#fef2f2',
+                          color: isPositive ? '#166534' : '#991b1b',
+                        }}>
+                          {isPositive ? '+' : '-'} {flag.replace(/-/g, ' ')}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Research Interests */}
           {interests.length > 0 && (

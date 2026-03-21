@@ -39,6 +39,7 @@ export default async function VisitorDetailPage({ params, searchParams }) {
         visit_count, first_visit::text as first_visit, last_visit::text as last_visit,
         pages_visited, referrers,
         intent_score, intent_tier, interests, referrer_source, tags,
+        confidence, confidence_score, confidence_flags,
         processed_at::text as processed_at,
         ghl_pushed, ghl_pushed_at::text as ghl_pushed_at, ghl_contact_id,
         created_at::text as created_at

@@ -1,6 +1,6 @@
 import { getDb } from '../../../../lib/db';
 import { classifyUrl, classifyReferrer } from '../../../../lib/taxonomies';
-import { scoreIntent, extractInterests, generateTags } from '../../../../lib/scoring';
+import { scoreIntent, extractInterests, generateTags, scoreConfidence } from '../../../../lib/scoring';
 
 /**
  * GET /api/cron/process-visitors
@@ -45,7 +45,9 @@ export async function GET(request) {
 
       // Fetch unprocessed visitors for this client
       const unprocessed = await sql`
-        SELECT id, email, visit_count, first_visit, last_visit,
+        SELECT id, email, first_name, last_name, phone, city, state,
+               company_name, job_title, all_emails,
+               visit_count, first_visit, last_visit,
                pages_visited, referrers
         FROM visitors
         WHERE client_key = ${clientKey}
@@ -78,6 +80,11 @@ export async function GET(request) {
           const interests = extractInterests(allClassifications);
           const tags = generateTags(tier, interests, primarySource);
 
+          // Score confidence
+          const { confidence, confidenceScore, confidenceFlags } = scoreConfidence(
+            visitor, allClassifications, clientKey
+          );
+
           // Write results back
           await sql`
             UPDATE visitors SET
@@ -86,6 +93,9 @@ export async function GET(request) {
               interests = ${JSON.stringify(interests)}::jsonb,
               referrer_source = ${primarySource},
               tags = ${JSON.stringify(tags)}::jsonb,
+              confidence = ${confidence},
+              confidence_score = ${confidenceScore},
+              confidence_flags = ${JSON.stringify(confidenceFlags)}::jsonb,
               processed = TRUE,
               processed_at = NOW()
             WHERE id = ${visitor.id}
