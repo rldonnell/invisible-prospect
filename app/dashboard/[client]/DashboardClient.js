@@ -38,7 +38,11 @@ export default function DashboardClient({ data }) {
     clientName, totalVisitors, allTimeTotal, tiers, interests,
     sources, topVisitors, dateRange, lastProcessed,
     clientGeo, dateWindow, activeState,
+    isAuthenticated, authRole,
   } = data;
+
+  // Authenticated users see full names; unauthenticated see "First L."
+  const showFullNames = !!isAuthenticated;
 
   const activeDays = String(dateWindow || 30);
 
@@ -178,7 +182,16 @@ export default function DashboardClient({ data }) {
             <h1 style={styles.h1}>
               <span style={styles.logo}>P5</span> Invisible Patient Intelligence
             </h1>
-            <p style={styles.subtitle}>{clientName}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <p style={styles.subtitle}>{clientName}</p>
+              {isAuthenticated && authRole === 'admin' && (
+                <span style={{
+                  fontSize: 10, fontWeight: 600, color: '#6366f1',
+                  backgroundColor: '#eef2ff', padding: '2px 8px',
+                  borderRadius: 4, letterSpacing: 0.5, textTransform: 'uppercase',
+                }}>Admin</span>
+              )}
+            </div>
           </div>
           <div style={styles.headerRight}>
             <div style={styles.dateWindowRow}>
@@ -222,6 +235,17 @@ export default function DashboardClient({ data }) {
               <div style={styles.lastUpdated}>
                 Last updated: {fmtDate(lastProcessed)}
               </div>
+            )}
+            {isAuthenticated && (
+              <button
+                onClick={async () => {
+                  await fetch('/api/dashboard/auth', { method: 'DELETE' });
+                  window.location.reload();
+                }}
+                style={styles.logoutBtn}
+              >
+                Sign Out
+              </button>
             )}
           </div>
         </header>
@@ -311,7 +335,7 @@ export default function DashboardClient({ data }) {
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={styles.th}>Name</th>
+                  <th style={styles.th}>{showFullNames ? 'Name / Email' : 'Name'}</th>
                   <th style={styles.th}>Location</th>
                   <th style={styles.th}>Score</th>
                   <th style={styles.th}>Tier</th>
@@ -327,8 +351,14 @@ export default function DashboardClient({ data }) {
                   <tr key={v.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                     <td style={styles.td}>
                       <a href={`${pathname}/visitor/${v.id}`} style={styles.nameLink}>
-                        {v.first_name} {v.last_initial}.
+                        {showFullNames
+                          ? `${v.first_name} ${v.last_name}`.trim()
+                          : `${v.first_name} ${v.last_initial}.`
+                        }
                       </a>
+                      {showFullNames && v.email && (
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{v.email}</div>
+                      )}
                     </td>
                     <td style={styles.td}>{[v.city, v.state].filter(Boolean).join(', ') || '-'}</td>
                     <td style={{ ...styles.td, fontWeight: 600 }}>{v.intent_score}</td>
@@ -458,6 +488,17 @@ const styles = {
   },
   dateRange: { fontSize: 14, fontWeight: 600, color: '#334155' },
   lastUpdated: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+  logoutBtn: {
+    padding: '4px 12px',
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#64748b',
+    backgroundColor: 'transparent',
+    border: '1px solid #e2e8f0',
+    borderRadius: 6,
+    cursor: 'pointer',
+    marginTop: 4,
+  },
   kpiRow: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',

@@ -1,5 +1,8 @@
+import { cookies } from 'next/headers';
 import { getDb } from '../../../lib/db';
+import { verifySessionToken, isAuthorized, COOKIE_NAME } from '../../../lib/auth';
 import DashboardClient from './DashboardClient';
+import LoginForm from './LoginForm';
 
 // Force fresh data on every request — no Vercel caching
 export const dynamic = 'force-dynamic';
@@ -9,7 +12,8 @@ export const revalidate = 0;
  * /dashboard/[client]
  *
  * Server component that fetches data and passes to client component.
- * Optional: ?key=DASHBOARD_KEY for access control
+ * Requires cookie-based auth (per-client password or admin password).
+ * Falls back to legacy ?key= param if DASH_SECRET is not set yet.
  */
 export async function generateMetadata({ params }) {
   const { client } = params;
@@ -19,18 +23,49 @@ export async function generateMetadata({ params }) {
   };
 }
 
+// Friendly display names (used in both login and dashboard)
+const CLIENT_NAMES = {
+  'demo': 'Demo Practice (Anonymized)',
+};
+
+function getClientName(client) {
+  return CLIENT_NAMES[client] || client.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default async function DashboardPage({ params, searchParams }) {
   const { client } = params;
-  const key = searchParams?.key;
+  const clientName = getClientName(client);
 
-  // Access control
-  if (process.env.DASHBOARD_KEY && key !== process.env.DASHBOARD_KEY) {
-    return (
-      <div style={{ padding: '60px', textAlign: 'center', fontFamily: 'system-ui' }}>
-        <h1 style={{ fontSize: '24px', color: '#666' }}>Access Required</h1>
-        <p style={{ color: '#999' }}>Add ?key=YOUR_KEY to the URL to access this dashboard.</p>
-      </div>
-    );
+  // --- Authentication ---
+  const dashSecret = process.env.DASH_SECRET;
+  let isAuthenticated = false;
+  let authRole = null;
+
+  if (dashSecret) {
+    // Cookie-based auth is active
+    const cookieStore = cookies();
+    const sessionCookie = cookieStore.get(COOKIE_NAME);
+    const session = verifySessionToken(sessionCookie?.value);
+
+    if (!isAuthorized(session, client)) {
+      // Not logged in or wrong client — show login form
+      return <LoginForm clientKey={client} clientName={clientName} />;
+    }
+
+    // Session is valid — show full names
+    isAuthenticated = true;
+    authRole = session.role;
+  } else {
+    // Legacy fallback: ?key= param (for backward compat until DASH_SECRET is set)
+    const key = searchParams?.key;
+    if (process.env.DASHBOARD_KEY && key !== process.env.DASHBOARD_KEY) {
+      return (
+        <div style={{ padding: '60px', textAlign: 'center', fontFamily: 'system-ui' }}>
+          <h1 style={{ fontSize: '24px', color: '#666' }}>Access Required</h1>
+          <p style={{ color: '#999' }}>Add ?key=YOUR_KEY to the URL to access this dashboard.</p>
+        </div>
+      );
+    }
   }
 
   try {
@@ -47,7 +82,6 @@ export default async function DashboardPage({ params, searchParams }) {
 
     // State filter — ?state=TX filters everything to Texas-only
     const stateParam = searchParams?.state || '';
-    // Use empty string for "all states" so query shape stays consistent
     const stateFilter = stateParam.toUpperCase();
     const filterByState = stateFilter.length === 2;
 
@@ -107,7 +141,6 @@ export default async function DashboardPage({ params, searchParams }) {
         `;
 
     // Top visitors — all tiers so filters work across full dataset
-    // Include last_name and email for search (display still uses initial only)
     const topVisitors = filterByState
       ? await sql`
           SELECT id, COALESCE(first_name, '') as first_name,
@@ -160,13 +193,7 @@ export default async function DashboardPage({ params, searchParams }) {
       ORDER BY completed_at DESC LIMIT 1
     `;
 
-    // Friendly display names
-    const CLIENT_NAMES = {
-      'demo': 'Demo Practice (Anonymized)',
-    };
-    const clientName = CLIENT_NAMES[client] || client.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-    // Client geo config — if set, enables the "State Only" quick filter
+    // Client geo config
     const CLIENT_GEO = {
       'sa-spine': { code: 'TX', label: 'Texas' },
       'az-breasts': { code: 'AZ', label: 'Arizona' },
@@ -188,6 +215,8 @@ export default async function DashboardPage({ params, searchParams }) {
       clientGeo,
       dateWindow: showAll ? 'all' : days,
       activeState: filterByState ? stateFilter : null,
+      isAuthenticated,
+      authRole,
     };
 
     return <DashboardClient data={data} />;
