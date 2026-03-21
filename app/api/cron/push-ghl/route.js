@@ -139,8 +139,9 @@ export async function GET(request) {
     const sql = getDb();
     const { searchParams } = new URL(request.url);
     const singleClient = searchParams.get('client');
-    // Batch size — process this many per call to stay within Vercel timeout
-    const batchSize = parseInt(searchParams.get('limit')) || 25;
+    // Batch size — keep small to stay within Vercel 60s timeout
+    // Each contact needs ~2 API calls + DB write + delay ≈ 3s each
+    const batchSize = parseInt(searchParams.get('limit')) || 10;
 
     const activeClients = singleClient
       ? [singleClient]
@@ -245,8 +246,8 @@ export async function GET(request) {
           }
         }
 
-        // Rate limit: pace at ~50 requests/min
-        await new Promise(resolve => setTimeout(resolve, 1200));
+        // Rate limit: ~80 requests/min (750ms between contacts)
+        await new Promise(resolve => setTimeout(resolve, 750));
       }
 
       const remainingAfter = remaining.count - (created + updated);
