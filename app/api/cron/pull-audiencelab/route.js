@@ -213,18 +213,15 @@ export async function GET(request) {
                 processed = FALSE
             `;
 
-            if (result.count > 0) {
-              // Check if it was an insert or update by looking at visit_count
-              // If visit_count = 1 after upsert, it was a new insert
-              const check = await sql`
-                SELECT visit_count FROM visitors
-                WHERE client_key = ${clientKey} AND hem_sha256 = ${dedupKey}
-              `;
-              if (check[0]?.visit_count === 1) {
-                inserted++;
-              } else {
-                updated++;
-              }
+            // Check if it was an insert or update by looking at visit_count
+            const check = await sql`
+              SELECT visit_count FROM visitors
+              WHERE client_key = ${clientKey} AND hem_sha256 = ${dedupKey}
+            `;
+            if (check[0]?.visit_count === 1) {
+              inserted++;
+            } else {
+              updated++;
             }
           } catch (dbErr) {
             console.error(`[${clientKey}] DB error for ${dedupKey}:`, dbErr.message);
