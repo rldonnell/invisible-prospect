@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 const TIER_COLORS = {
   HOT: '#dc2626',
   High: '#f59e0b',
@@ -8,6 +10,9 @@ const TIER_COLORS = {
 };
 
 export default function VisitorProfile({ visitor, clientKey }) {
+  const [darkMode, setDarkMode] = useState(
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dark') === '1'
+  );
   const v = visitor;
   const fullName = `${v.first_name} ${v.last_name}`.trim() || 'Unknown Visitor';
   const location = [v.address, v.city, v.state, v.zip].filter(Boolean).join(', ') || 'Unknown';
@@ -43,150 +48,182 @@ export default function VisitorProfile({ visitor, clientKey }) {
     .map(p => p.trim())
     .filter(Boolean);
 
+  // Merge light + dark styles
+  const s = darkMode ? Object.keys(styles).reduce((acc, key) => {
+    acc[key] = { ...styles[key], ...(vpDarkStyles[key] || {}) };
+    return acc;
+  }, {}) : styles;
+
+  const fs = darkMode ? {
+    wrap: fieldStyles.wrap,
+    label: { ...fieldStyles.label, color: '#64748b' },
+    value: { ...fieldStyles.value, color: '#e2e8f0' },
+  } : fieldStyles;
+
   return (
-    <div style={styles.page}>
-      {/* Back link */}
-      <a href={`/dashboard/${clientKey}`} style={styles.backLink}>
-        &larr; Back to Dashboard
-      </a>
+    <div style={s.page}>
+      {/* Back link + Dark mode toggle */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <a href={`/dashboard/${clientKey}`} style={s.backLink}>
+          &larr; Back to Dashboard
+        </a>
+        <button
+          onClick={() => setDarkMode(dm => !dm)}
+          style={{
+            padding: '5px 12px',
+            borderRadius: 6,
+            border: `1px solid ${darkMode ? '#6366f1' : '#e2e8f0'}`,
+            backgroundColor: darkMode ? '#6366f1' : '#fff',
+            color: darkMode ? '#fff' : '#64748b',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          {darkMode ? '\u2600\uFE0F Light' : '\uD83C\uDF19 Dark'}
+        </button>
+      </div>
 
       {/* Header Card */}
-      <div style={styles.headerCard}>
-        <div style={styles.headerLeft}>
-          <div style={styles.avatar}>
+      <div style={s.headerCard}>
+        <div style={s.headerLeft}>
+          <div style={s.avatar}>
             {v.first_name ? v.first_name[0].toUpperCase() : '?'}
           </div>
           <div>
-            <h1 style={styles.name}>{fullName}</h1>
-            <p style={styles.locationText}>{location}</p>
+            <h1 style={s.name}>{fullName}</h1>
+            <p style={s.locationText}>{location}</p>
             {v.job_title && v.company_name && (
-              <p style={styles.jobLine}>{v.job_title} at {v.company_name}</p>
+              <p style={s.jobLine}>{v.job_title} at {v.company_name}</p>
             )}
             {v.job_title && !v.company_name && (
-              <p style={styles.jobLine}>{v.job_title}</p>
+              <p style={s.jobLine}>{v.job_title}</p>
             )}
             {!v.job_title && v.company_name && (
-              <p style={styles.jobLine}>{v.company_name}</p>
+              <p style={s.jobLine}>{v.company_name}</p>
             )}
           </div>
         </div>
-        <div style={styles.headerRight}>
+        <div style={s.headerRight}>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <div style={{ ...styles.scoreBadge, backgroundColor: tierColor }}>
+            <div style={{ ...s.scoreBadge, backgroundColor: tierColor }}>
               {v.intent_tier}
             </div>
             {v.confidence && (
-              <div style={{ ...styles.scoreBadge, backgroundColor: confidenceColor }}>
+              <div style={{ ...s.scoreBadge, backgroundColor: confidenceColor }}>
                 {v.confidence} Confidence
               </div>
             )}
           </div>
-          <div style={styles.scoreNumber}>Intent: {v.intent_score} | Confidence: {v.confidence_score || '-'}</div>
-          <div style={styles.visits}>{v.visit_count} visit{v.visit_count !== 1 ? 's' : ''}</div>
+          <div style={s.scoreNumber}>Intent: {v.intent_score} | Confidence: {v.confidence_score || '-'}</div>
+          <div style={s.visits}>{v.visit_count} visit{v.visit_count !== 1 ? 's' : ''}</div>
         </div>
       </div>
 
       {/* Two-column layout */}
-      <div style={styles.columns}>
+      <div style={s.columns}>
 
         {/* Left column — Profile Details */}
-        <div style={styles.column}>
+        <div style={s.column}>
 
           {/* Personal Info */}
-          <div style={styles.card}>
-            <h2 style={styles.sectionTitle}>Personal Information</h2>
-            <div style={styles.fieldGrid}>
-              <Field label="Full Name" value={fullName} />
-              <Field label="Age Range" value={v.age_range} />
-              <Field label="Gender" value={v.gender === 'M' ? 'Male' : v.gender === 'F' ? 'Female' : v.gender} />
-              <Field label="Marital Status" value={v.married === 'Single' ? 'Single' : v.married === 'Married' ? 'Married' : v.married} />
-              <Field label="Children" value={v.children === 'Y' ? 'Yes' : v.children === 'N' ? 'No' : v.children} />
-              <Field label="Homeowner" value={v.homeowner === 'Homeowner' ? 'Yes' : v.homeowner === 'Renter' ? 'No (Renter)' : v.homeowner} />
+          <div style={s.card}>
+            <h2 style={s.sectionTitle}>Personal Information</h2>
+            <div style={s.fieldGrid}>
+              <Field fieldStyles={fs} label="Full Name" value={fullName} />
+              <Field fieldStyles={fs} label="Age Range" value={v.age_range} />
+              <Field fieldStyles={fs} label="Gender" value={v.gender === 'M' ? 'Male' : v.gender === 'F' ? 'Female' : v.gender} />
+              <Field fieldStyles={fs} label="Marital Status" value={v.married === 'Single' ? 'Single' : v.married === 'Married' ? 'Married' : v.married} />
+              <Field fieldStyles={fs} label="Children" value={v.children === 'Y' ? 'Yes' : v.children === 'N' ? 'No' : v.children} />
+              <Field fieldStyles={fs} label="Homeowner" value={v.homeowner === 'Homeowner' ? 'Yes' : v.homeowner === 'Renter' ? 'No (Renter)' : v.homeowner} />
             </div>
           </div>
 
           {/* Address */}
-          <div style={styles.card}>
-            <h2 style={styles.sectionTitle}>Address</h2>
-            <div style={styles.fieldGrid}>
-              <Field label="Street" value={v.address} wide />
-              <Field label="City" value={v.city} />
-              <Field label="State" value={v.state} />
-              <Field label="ZIP" value={v.zip} />
+          <div style={s.card}>
+            <h2 style={s.sectionTitle}>Address</h2>
+            <div style={s.fieldGrid}>
+              <Field fieldStyles={fs} label="Street" value={v.address} wide />
+              <Field fieldStyles={fs} label="City" value={v.city} />
+              <Field fieldStyles={fs} label="State" value={v.state} />
+              <Field fieldStyles={fs} label="ZIP" value={v.zip} />
             </div>
           </div>
 
           {/* Financial */}
-          <div style={styles.card}>
-            <h2 style={styles.sectionTitle}>Financial Profile</h2>
-            <div style={styles.fieldGrid}>
-              <Field label="Income Range" value={v.income} />
-              <Field label="Net Worth" value={v.net_worth} />
+          <div style={s.card}>
+            <h2 style={s.sectionTitle}>Financial Profile</h2>
+            <div style={s.fieldGrid}>
+              <Field fieldStyles={fs} label="Income Range" value={v.income} />
+              <Field fieldStyles={fs} label="Net Worth" value={v.net_worth} />
             </div>
           </div>
 
           {/* Employment */}
           {(v.company_name || v.job_title || v.company_industry) && (
-            <div style={styles.card}>
-              <h2 style={styles.sectionTitle}>Employment</h2>
-              <div style={styles.fieldGrid}>
-                <Field label="Company" value={v.company_name} />
-                <Field label="Job Title" value={v.job_title} />
-                <Field label="Industry" value={v.company_industry} />
-                <Field label="Department" value={v.department} />
-                <Field label="Seniority" value={v.seniority_level} />
-                <Field label="Company Size" value={v.company_size} />
+            <div style={s.card}>
+              <h2 style={s.sectionTitle}>Employment</h2>
+              <div style={s.fieldGrid}>
+                <Field fieldStyles={fs} label="Company" value={v.company_name} />
+                <Field fieldStyles={fs} label="Job Title" value={v.job_title} />
+                <Field fieldStyles={fs} label="Industry" value={v.company_industry} />
+                <Field fieldStyles={fs} label="Department" value={v.department} />
+                <Field fieldStyles={fs} label="Seniority" value={v.seniority_level} />
+                <Field fieldStyles={fs} label="Company Size" value={v.company_size} />
               </div>
             </div>
           )}
 
           {/* Contact Info */}
-          <div style={styles.card}>
-            <h2 style={styles.sectionTitle}>Contact Information</h2>
+          <div style={s.card}>
+            <h2 style={s.sectionTitle}>Contact Information</h2>
             {emailList.length > 0 && (
-              <div style={styles.contactSection}>
-                <div style={styles.contactLabel}>Email Addresses</div>
+              <div style={s.contactSection}>
+                <div style={s.contactLabel}>Email Addresses</div>
                 {emailList.map((email, i) => (
-                  <div key={i} style={styles.contactValue}>
-                    <a href={`mailto:${email}`} style={styles.link}>{email}</a>
-                    {i === 0 && <span style={styles.primaryBadge}>Primary</span>}
+                  <div key={i} style={s.contactValue}>
+                    <a href={`mailto:${email}`} style={s.link}>{email}</a>
+                    {i === 0 && <span style={s.primaryBadge}>Primary</span>}
                   </div>
                 ))}
               </div>
             )}
             {v.business_email && (
-              <div style={styles.contactSection}>
-                <div style={styles.contactLabel}>Business Email</div>
-                <div style={styles.contactValue}>
-                  <a href={`mailto:${v.business_email}`} style={styles.link}>{v.business_email}</a>
+              <div style={s.contactSection}>
+                <div style={s.contactLabel}>Business Email</div>
+                <div style={s.contactValue}>
+                  <a href={`mailto:${v.business_email}`} style={s.link}>{v.business_email}</a>
                 </div>
               </div>
             )}
             {phoneList.length > 0 && (
-              <div style={styles.contactSection}>
-                <div style={styles.contactLabel}>Phone Numbers</div>
+              <div style={s.contactSection}>
+                <div style={s.contactLabel}>Phone Numbers</div>
                 {phoneList.map((phone, i) => (
-                  <div key={i} style={styles.contactValue}>{phone}</div>
+                  <div key={i} style={s.contactValue}>{phone}</div>
                 ))}
               </div>
             )}
             {v.linkedin && (
-              <div style={styles.contactSection}>
-                <div style={styles.contactLabel}>LinkedIn</div>
-                <div style={styles.contactValue}>
+              <div style={s.contactSection}>
+                <div style={s.contactLabel}>LinkedIn</div>
+                <div style={s.contactValue}>
                   <a href={v.linkedin.startsWith('http') ? v.linkedin : `https://${v.linkedin}`}
-                     target="_blank" rel="noopener noreferrer" style={styles.link}>
+                     target="_blank" rel="noopener noreferrer" style={s.link}>
                     {v.linkedin}
                   </a>
                 </div>
               </div>
             )}
             {v.facebook_url && (
-              <div style={styles.contactSection}>
-                <div style={styles.contactLabel}>Facebook</div>
-                <div style={styles.contactValue}>
+              <div style={s.contactSection}>
+                <div style={s.contactLabel}>Facebook</div>
+                <div style={s.contactValue}>
                   <a href={v.facebook_url.startsWith('http') ? v.facebook_url : `https://${v.facebook_url}`}
-                     target="_blank" rel="noopener noreferrer" style={styles.link}>
+                     target="_blank" rel="noopener noreferrer" style={s.link}>
                     {v.facebook_url}
                   </a>
                 </div>
@@ -196,45 +233,45 @@ export default function VisitorProfile({ visitor, clientKey }) {
         </div>
 
         {/* Right column — Intent & Activity */}
-        <div style={styles.column}>
+        <div style={s.column}>
 
           {/* Intent Summary */}
-          <div style={{ ...styles.card, borderLeft: `4px solid ${tierColor}` }}>
-            <h2 style={styles.sectionTitle}>Intent Summary</h2>
-            <div style={styles.intentGrid}>
-              <div style={styles.intentItem}>
-                <div style={styles.intentLabel}>Score</div>
-                <div style={{ ...styles.intentValue, color: tierColor, fontSize: 32 }}>{v.intent_score}</div>
+          <div style={{ ...s.card, borderLeft: `4px solid ${tierColor}` }}>
+            <h2 style={s.sectionTitle}>Intent Summary</h2>
+            <div style={s.intentGrid}>
+              <div style={s.intentItem}>
+                <div style={s.intentLabel}>Score</div>
+                <div style={{ ...s.intentValue, color: tierColor, fontSize: 32 }}>{v.intent_score}</div>
               </div>
-              <div style={styles.intentItem}>
-                <div style={styles.intentLabel}>Tier</div>
-                <div style={{ ...styles.intentValue, color: tierColor }}>{v.intent_tier}</div>
+              <div style={s.intentItem}>
+                <div style={s.intentLabel}>Tier</div>
+                <div style={{ ...s.intentValue, color: tierColor }}>{v.intent_tier}</div>
               </div>
-              <div style={styles.intentItem}>
-                <div style={styles.intentLabel}>Total Visits</div>
-                <div style={styles.intentValue}>{v.visit_count}</div>
+              <div style={s.intentItem}>
+                <div style={s.intentLabel}>Total Visits</div>
+                <div style={s.intentValue}>{v.visit_count}</div>
               </div>
-              <div style={styles.intentItem}>
-                <div style={styles.intentLabel}>Traffic Source</div>
-                <div style={styles.intentValue}>{v.referrer_source || 'Direct'}</div>
+              <div style={s.intentItem}>
+                <div style={s.intentLabel}>Traffic Source</div>
+                <div style={s.intentValue}>{v.referrer_source || 'Direct'}</div>
               </div>
             </div>
           </div>
 
           {/* Confidence Assessment */}
           {v.confidence && (
-            <div style={{ ...styles.card, borderLeft: `4px solid ${confidenceColor}` }}>
-              <h2 style={styles.sectionTitle}>Identity Confidence</h2>
-              <div style={styles.intentGrid}>
-                <div style={styles.intentItem}>
-                  <div style={styles.intentLabel}>Score</div>
-                  <div style={{ ...styles.intentValue, color: confidenceColor, fontSize: 32 }}>
+            <div style={{ ...s.card, borderLeft: `4px solid ${confidenceColor}` }}>
+              <h2 style={s.sectionTitle}>Identity Confidence</h2>
+              <div style={s.intentGrid}>
+                <div style={s.intentItem}>
+                  <div style={s.intentLabel}>Score</div>
+                  <div style={{ ...s.intentValue, color: confidenceColor, fontSize: 32 }}>
                     {v.confidence_score}
                   </div>
                 </div>
-                <div style={styles.intentItem}>
-                  <div style={styles.intentLabel}>Level</div>
-                  <div style={{ ...styles.intentValue, color: confidenceColor }}>
+                <div style={s.intentItem}>
+                  <div style={s.intentLabel}>Level</div>
+                  <div style={{ ...s.intentValue, color: confidenceColor }}>
                     {v.confidence}
                   </div>
                 </div>
@@ -244,13 +281,13 @@ export default function VisitorProfile({ visitor, clientKey }) {
                   <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
                     Signals
                   </div>
-                  <div style={styles.tagWrap}>
+                  <div style={s.tagWrap}>
                     {confidenceFlags.map((flag, i) => {
                       const isPositive = ['name-matches-email', 'multi-page-depth', 'has-enrichment', 'in-market', 'phone-matches-state', 'has-research-interest'].includes(flag);
                       const isSevere = ['fake-name-detected', 'fake-phone-555', 'suspicious-email', 'extreme-visit-count'].includes(flag);
                       return (
                         <span key={i} style={{
-                          ...styles.systemTag,
+                          ...s.systemTag,
                           backgroundColor: isPositive ? '#dcfce7' : isSevere ? '#fecaca' : '#fef2f2',
                           color: isPositive ? '#166534' : isSevere ? '#7f1d1d' : '#991b1b',
                           fontWeight: isSevere ? 'bold' : 'normal',
@@ -267,29 +304,29 @@ export default function VisitorProfile({ visitor, clientKey }) {
 
           {/* Research Interests */}
           {interests.length > 0 && (
-            <div style={styles.card}>
-              <h2 style={styles.sectionTitle}>Research Interests</h2>
-              <div style={styles.tagWrap}>
+            <div style={s.card}>
+              <h2 style={s.sectionTitle}>Research Interests</h2>
+              <div style={s.tagWrap}>
                 {interests.map((interest, i) => (
-                  <span key={i} style={styles.interestTag}>{interest}</span>
+                  <span key={i} style={s.interestTag}>{interest}</span>
                 ))}
               </div>
             </div>
           )}
 
           {/* Visit Timeline */}
-          <div style={styles.card}>
-            <h2 style={styles.sectionTitle}>Visit Timeline</h2>
-            <div style={styles.fieldGrid}>
-              <Field label="First Visit" value={fmtDate(v.first_visit)} />
-              <Field label="Last Visit" value={fmtDate(v.last_visit)} />
+          <div style={s.card}>
+            <h2 style={s.sectionTitle}>Visit Timeline</h2>
+            <div style={s.fieldGrid}>
+              <Field fieldStyles={fs} label="First Visit" value={fmtDate(v.first_visit)} />
+              <Field fieldStyles={fs} label="Last Visit" value={fmtDate(v.last_visit)} />
             </div>
           </div>
 
           {/* Pages Visited */}
-          <div style={styles.card}>
-            <h2 style={styles.sectionTitle}>Pages Visited ({pages.length})</h2>
-            <div style={styles.pageList}>
+          <div style={s.card}>
+            <h2 style={s.sectionTitle}>Pages Visited ({pages.length})</h2>
+            <div style={s.pageList}>
               {pages.map((url, i) => {
                 // Extract path from full URL
                 let display = url;
@@ -299,24 +336,24 @@ export default function VisitorProfile({ visitor, clientKey }) {
                   if (display.length > 80) display = display.substring(0, 77) + '...';
                 } catch {}
                 return (
-                  <div key={i} style={styles.pageItem}>
-                    <a href={url} target="_blank" rel="noopener noreferrer" style={styles.pageLink}>
+                  <div key={i} style={s.pageItem}>
+                    <a href={url} target="_blank" rel="noopener noreferrer" style={s.pageLink}>
                       {display}
                     </a>
                   </div>
                 );
               })}
               {pages.length === 0 && (
-                <p style={styles.empty}>No page data recorded.</p>
+                <p style={s.empty}>No page data recorded.</p>
               )}
             </div>
           </div>
 
           {/* Referrer Sources */}
           {referrers.length > 0 && (
-            <div style={styles.card}>
-              <h2 style={styles.sectionTitle}>Referrer Sources</h2>
-              <div style={styles.pageList}>
+            <div style={s.card}>
+              <h2 style={s.sectionTitle}>Referrer Sources</h2>
+              <div style={s.pageList}>
                 {referrers.map((ref, i) => {
                   let display = ref;
                   try {
@@ -324,7 +361,7 @@ export default function VisitorProfile({ visitor, clientKey }) {
                     display = u.hostname;
                   } catch {}
                   return (
-                    <div key={i} style={styles.pageItem}>{display}</div>
+                    <div key={i} style={s.pageItem}>{display}</div>
                   );
                 })}
               </div>
@@ -333,30 +370,30 @@ export default function VisitorProfile({ visitor, clientKey }) {
 
           {/* Tags */}
           {tags.length > 0 && (
-            <div style={styles.card}>
-              <h2 style={styles.sectionTitle}>System Tags</h2>
-              <div style={styles.tagWrap}>
+            <div style={s.card}>
+              <h2 style={s.sectionTitle}>System Tags</h2>
+              <div style={s.tagWrap}>
                 {tags.map((tag, i) => (
-                  <span key={i} style={styles.systemTag}>{tag}</span>
+                  <span key={i} style={s.systemTag}>{tag}</span>
                 ))}
               </div>
             </div>
           )}
 
           {/* GHL Status */}
-          <div style={styles.card}>
-            <h2 style={styles.sectionTitle}>CRM Status</h2>
-            <div style={styles.fieldGrid}>
-              <Field label="Pushed to GHL" value={v.ghl_pushed ? 'Yes' : 'Not yet'} />
-              {v.ghl_pushed_at && <Field label="Pushed At" value={fmtDate(v.ghl_pushed_at)} />}
-              {v.ghl_contact_id && <Field label="GHL Contact ID" value={v.ghl_contact_id} />}
+          <div style={s.card}>
+            <h2 style={s.sectionTitle}>CRM Status</h2>
+            <div style={s.fieldGrid}>
+              <Field fieldStyles={fs} label="Pushed to GHL" value={v.ghl_pushed ? 'Yes' : 'Not yet'} />
+              {v.ghl_pushed_at && <Field fieldStyles={fs} label="Pushed At" value={fmtDate(v.ghl_pushed_at)} />}
+              {v.ghl_contact_id && <Field fieldStyles={fs} label="GHL Contact ID" value={v.ghl_contact_id} />}
             </div>
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <footer style={styles.footer}>
+      <footer style={s.footer}>
         <p>P5 Marketing &bull; VisitorID&trade; &bull; Visitor ID: {v.id}</p>
         <p style={{ fontSize: 11, marginTop: 2 }}>Processed: {fmtDate(v.processed_at)}</p>
       </footer>
@@ -364,12 +401,13 @@ export default function VisitorProfile({ visitor, clientKey }) {
   );
 }
 
-function Field({ label, value, wide }) {
+function Field({ label, value, wide, fieldStyles: fst }) {
   if (!value) return null;
+  const st = fst || fieldStyles;
   return (
-    <div style={{ ...fieldStyles.wrap, ...(wide ? { gridColumn: '1 / -1' } : {}) }}>
-      <div style={fieldStyles.label}>{label}</div>
-      <div style={fieldStyles.value}>{value}</div>
+    <div style={{ ...st.wrap, ...(wide ? { gridColumn: '1 / -1' } : {}) }}>
+      <div style={st.label}>{label}</div>
+      <div style={st.value}>{value}</div>
     </div>
   );
 }
@@ -497,4 +535,31 @@ const styles = {
     fontSize: 12,
     marginTop: 20,
   },
+};
+
+/* ── Dark mode overrides ── */
+const vpDarkStyles = {
+  page: { backgroundColor: '#0f172a', color: '#e2e8f0' },
+  backLink: { color: '#a5b4fc' },
+  headerCard: { backgroundColor: '#1e293b', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' },
+  avatar: { backgroundColor: '#818cf8' },
+  name: { color: '#f8fafc' },
+  locationText: { color: '#94a3b8' },
+  jobLine: { color: '#94a3b8' },
+  scoreNumber: { color: '#94a3b8' },
+  visits: { color: '#64748b' },
+  card: { backgroundColor: '#1e293b', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' },
+  sectionTitle: { color: '#cbd5e1' },
+  intentLabel: { color: '#64748b' },
+  intentValue: { color: '#f8fafc' },
+  contactLabel: { color: '#64748b' },
+  contactValue: { color: '#e2e8f0' },
+  primaryBadge: { backgroundColor: '#312e81', color: '#a5b4fc' },
+  link: { color: '#a5b4fc' },
+  interestTag: { backgroundColor: '#312e81', color: '#a5b4fc' },
+  systemTag: { backgroundColor: '#1e293b', color: '#94a3b8' },
+  pageItem: { borderBottomColor: '#334155', color: '#cbd5e1' },
+  pageLink: { color: '#a5b4fc' },
+  empty: { color: '#64748b' },
+  footer: { color: '#475569' },
 };

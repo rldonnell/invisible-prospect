@@ -32,6 +32,7 @@ export default function DashboardClient({ data }) {
   const [filter, setFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [darkMode, setDarkMode] = useState(false);
   const pageSize = 20;
 
   const {
@@ -65,13 +66,22 @@ export default function DashboardClient({ data }) {
   const windowHref = (val) => buildHref({ days: val === '30' ? undefined : val });
   const stateHref = (stateCode) => buildHref({ state: activeState ? '' : stateCode });
 
+  const chartInstances = useRef([]);
+
   useEffect(() => {
     if (!chartReady || typeof Chart === 'undefined') return;
+
+    // Destroy old chart instances before recreating
+    chartInstances.current.forEach(c => c.destroy());
+    chartInstances.current = [];
+
+    const textColor = darkMode ? '#e2e8f0' : '#334155';
+    const gridColor = darkMode ? '#334155' : '#f1f5f9';
 
     // Tier donut
     if (tierChartRef.current) {
       const ctx = tierChartRef.current.getContext('2d');
-      new Chart(ctx, {
+      chartInstances.current.push(new Chart(ctx, {
         type: 'doughnut',
         data: {
           labels: ['HOT', 'High', 'Medium', 'Low'],
@@ -86,16 +96,16 @@ export default function DashboardClient({ data }) {
           maintainAspectRatio: false,
           cutout: '65%',
           plugins: {
-            legend: { position: 'bottom', labels: { padding: 16, font: { size: 13 } } },
+            legend: { position: 'bottom', labels: { padding: 16, font: { size: 13 }, color: textColor } },
           },
         },
-      });
+      }));
     }
 
     // Source bar chart
     if (sourceChartRef.current && sources.length > 0) {
       const ctx = sourceChartRef.current.getContext('2d');
-      new Chart(ctx, {
+      chartInstances.current.push(new Chart(ctx, {
         type: 'bar',
         data: {
           labels: sources.slice(0, 8).map(s => s.source),
@@ -111,24 +121,24 @@ export default function DashboardClient({ data }) {
           indexAxis: 'y',
           plugins: { legend: { display: false } },
           scales: {
-            x: { grid: { display: false }, ticks: { font: { size: 12 } } },
-            y: { grid: { display: false }, ticks: { font: { size: 12 } } },
+            x: { grid: { display: false }, ticks: { font: { size: 12 }, color: textColor } },
+            y: { grid: { display: false }, ticks: { font: { size: 12 }, color: textColor } },
           },
         },
-      });
+      }));
     }
 
     // Interest horizontal bar
     if (interestChartRef.current && interests.length > 0) {
       const ctx = interestChartRef.current.getContext('2d');
       const top15 = interests.slice(0, 15);
-      new Chart(ctx, {
+      chartInstances.current.push(new Chart(ctx, {
         type: 'bar',
         data: {
           labels: top15.map(i => i.interest),
           datasets: [{
             data: top15.map(i => i.count),
-            backgroundColor: '#6366f1',
+            backgroundColor: darkMode ? '#818cf8' : '#6366f1',
             borderRadius: 4,
           }],
         },
@@ -138,13 +148,13 @@ export default function DashboardClient({ data }) {
           indexAxis: 'y',
           plugins: { legend: { display: false } },
           scales: {
-            x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } },
-            y: { grid: { display: false }, ticks: { font: { size: 11 } } },
+            x: { grid: { color: gridColor }, ticks: { font: { size: 11 }, color: textColor } },
+            y: { grid: { display: false }, ticks: { font: { size: 11 }, color: textColor } },
           },
         },
-      });
+      }));
     }
-  }, [chartReady, tiers, sources, interests]);
+  }, [chartReady, tiers, sources, interests, darkMode]);
 
   // Filter visitors (state already filtered server-side, just tier + search here)
   const filtered = topVisitors.filter(v => {
@@ -232,41 +242,49 @@ export default function DashboardClient({ data }) {
   // Preset download counts (for button labels)
   const countByTiers = (tierList) => topVisitors.filter(v => tierList.includes(v.intent_tier)).length;
 
+  // Merge light + dark styles
+  const s = darkMode ? Object.keys(styles).reduce((acc, key) => {
+    acc[key] = { ...styles[key], ...(darkStyles[key] || {}) };
+    return acc;
+  }, {}) : styles;
+
   return (
     <>
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
         onLoad={() => setChartReady(true)}
       />
-      <div style={styles.page}>
+      <div style={s.page}>
         {/* Header */}
-        <header style={styles.header}>
+        <header style={s.header}>
           <div>
-            <h1 style={styles.h1}>
-              <span style={styles.logo}>P5</span> VisitorID<sup style={{ fontSize: '0.5em', verticalAlign: 'super' }}>&trade;</sup>
+            <h1 style={s.h1}>
+              <span style={s.logo}>P5</span> VisitorID<sup style={{ fontSize: '0.5em', verticalAlign: 'super' }}>&trade;</sup>
             </h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <p style={styles.subtitle}>{clientName}</p>
+              <p style={s.subtitle}>{clientName}</p>
               {isAuthenticated && authRole === 'admin' && (
                 <span style={{
-                  fontSize: 10, fontWeight: 600, color: '#6366f1',
-                  backgroundColor: '#eef2ff', padding: '2px 8px',
+                  fontSize: 10, fontWeight: 600,
+                  color: darkMode ? '#a5b4fc' : '#6366f1',
+                  backgroundColor: darkMode ? '#312e81' : '#eef2ff',
+                  padding: '2px 8px',
                   borderRadius: 4, letterSpacing: 0.5, textTransform: 'uppercase',
                 }}>Admin</span>
               )}
             </div>
           </div>
-          <div style={styles.headerRight}>
-            <div style={styles.dateWindowRow}>
+          <div style={s.headerRight}>
+            <div style={s.dateWindowRow}>
               {DATE_WINDOWS.map(w => (
                 <a
                   key={w.value}
                   href={windowHref(w.value)}
                   style={{
-                    ...styles.dateWindowBtn,
-                    backgroundColor: activeDays === w.value ? '#6366f1' : '#fff',
-                    color: activeDays === w.value ? '#fff' : '#64748b',
-                    borderColor: activeDays === w.value ? '#6366f1' : '#e2e8f0',
+                    ...s.dateWindowBtn,
+                    backgroundColor: activeDays === w.value ? '#6366f1' : (darkMode ? '#1e293b' : '#fff'),
+                    color: activeDays === w.value ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                    borderColor: activeDays === w.value ? '#6366f1' : (darkMode ? '#334155' : '#e2e8f0'),
                     textDecoration: 'none',
                   }}
                 >
@@ -275,14 +293,14 @@ export default function DashboardClient({ data }) {
               ))}
               {clientGeo && (
                 <>
-                  <span style={{ color: '#e2e8f0', fontSize: 16, margin: '0 2px' }}>|</span>
+                  <span style={{ color: darkMode ? '#334155' : '#e2e8f0', fontSize: 16, margin: '0 2px' }}>|</span>
                   <a
                     href={stateHref(clientGeo.code)}
                     style={{
-                      ...styles.dateWindowBtn,
-                      backgroundColor: activeState ? '#16a34a' : '#fff',
-                      color: activeState ? '#fff' : '#64748b',
-                      borderColor: activeState ? '#16a34a' : '#e2e8f0',
+                      ...s.dateWindowBtn,
+                      backgroundColor: activeState ? '#16a34a' : (darkMode ? '#1e293b' : '#fff'),
+                      color: activeState ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                      borderColor: activeState ? '#16a34a' : (darkMode ? '#334155' : '#e2e8f0'),
                       textDecoration: 'none',
                     }}
                   >
@@ -290,12 +308,28 @@ export default function DashboardClient({ data }) {
                   </a>
                 </>
               )}
+              <span style={{ color: darkMode ? '#334155' : '#e2e8f0', fontSize: 16, margin: '0 2px' }}>|</span>
+              <button
+                onClick={() => setDarkMode(dm => !dm)}
+                style={{
+                  ...s.dateWindowBtn,
+                  backgroundColor: darkMode ? '#6366f1' : '#fff',
+                  color: darkMode ? '#fff' : '#64748b',
+                  borderColor: darkMode ? '#6366f1' : '#e2e8f0',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {darkMode ? '\u2600\uFE0F' : '\uD83C\uDF19'} {darkMode ? 'Light' : 'Dark'}
+              </button>
             </div>
-            <div style={styles.dateRange}>
+            <div style={s.dateRange}>
               {fmtDate(dateRange.earliest)} &mdash; {fmtDate(dateRange.latest)}
             </div>
             {lastProcessed && (
-              <div style={styles.lastUpdated}>
+              <div style={s.lastUpdated}>
                 Last updated: {fmtDate(lastProcessed)}
               </div>
             )}
@@ -305,7 +339,7 @@ export default function DashboardClient({ data }) {
                   await fetch('/api/dashboard/auth', { method: 'DELETE' });
                   window.location.reload();
                 }}
-                style={styles.logoutBtn}
+                style={s.logoutBtn}
               >
                 Sign Out
               </button>
@@ -314,46 +348,46 @@ export default function DashboardClient({ data }) {
         </header>
 
         {/* KPI Cards */}
-        <div style={styles.kpiRow}>
-          <div style={{ ...styles.kpiCard, borderTop: '4px solid #1e293b' }}>
-            <div style={styles.kpiLabel}>Total Identified</div>
-            <div style={styles.kpiValue}>{totalVisitors.toLocaleString()}</div>
+        <div style={s.kpiRow}>
+          <div style={{ ...s.kpiCard, borderTop: `4px solid ${darkMode ? '#e2e8f0' : '#1e293b'}` }}>
+            <div style={s.kpiLabel}>Total Identified</div>
+            <div style={s.kpiValue}>{totalVisitors.toLocaleString()}</div>
             {activeDays !== 'all' && allTimeTotal !== totalVisitors && (
-              <div style={styles.kpiSub}>{allTimeTotal.toLocaleString()} all-time</div>
+              <div style={s.kpiSub}>{allTimeTotal.toLocaleString()} all-time</div>
             )}
           </div>
-          <div style={{ ...styles.kpiCard, borderTop: `4px solid ${TIER_COLORS.HOT}` }}>
-            <div style={styles.kpiLabel}>HOT</div>
-            <div style={{ ...styles.kpiValue, color: TIER_COLORS.HOT }}>{tiers.HOT.toLocaleString()}</div>
-            <div style={styles.kpiSub}>Immediate Outreach</div>
+          <div style={{ ...s.kpiCard, borderTop: `4px solid ${TIER_COLORS.HOT}` }}>
+            <div style={s.kpiLabel}>HOT</div>
+            <div style={{ ...s.kpiValue, color: TIER_COLORS.HOT }}>{tiers.HOT.toLocaleString()}</div>
+            <div style={s.kpiSub}>Immediate Outreach</div>
           </div>
-          <div style={{ ...styles.kpiCard, borderTop: `4px solid ${TIER_COLORS.High}` }}>
-            <div style={styles.kpiLabel}>High Intent</div>
-            <div style={{ ...styles.kpiValue, color: TIER_COLORS.High }}>{tiers.High.toLocaleString()}</div>
-            <div style={styles.kpiSub}>Priority Nurture</div>
+          <div style={{ ...s.kpiCard, borderTop: `4px solid ${TIER_COLORS.High}` }}>
+            <div style={s.kpiLabel}>High Intent</div>
+            <div style={{ ...s.kpiValue, color: TIER_COLORS.High }}>{tiers.High.toLocaleString()}</div>
+            <div style={s.kpiSub}>Priority Nurture</div>
           </div>
-          <div style={{ ...styles.kpiCard, borderTop: `4px solid ${TIER_COLORS.Medium}` }}>
-            <div style={styles.kpiLabel}>Medium</div>
-            <div style={{ ...styles.kpiValue, color: TIER_COLORS.Medium }}>{tiers.Medium.toLocaleString()}</div>
-            <div style={styles.kpiSub}>Standard Follow-up</div>
+          <div style={{ ...s.kpiCard, borderTop: `4px solid ${TIER_COLORS.Medium}` }}>
+            <div style={s.kpiLabel}>Medium</div>
+            <div style={{ ...s.kpiValue, color: TIER_COLORS.Medium }}>{tiers.Medium.toLocaleString()}</div>
+            <div style={s.kpiSub}>Standard Follow-up</div>
           </div>
-          <div style={{ ...styles.kpiCard, borderTop: `4px solid ${TIER_COLORS.Low}` }}>
-            <div style={styles.kpiLabel}>Low</div>
-            <div style={{ ...styles.kpiValue, color: TIER_COLORS.Low }}>{tiers.Low.toLocaleString()}</div>
-            <div style={styles.kpiSub}>Awareness</div>
+          <div style={{ ...s.kpiCard, borderTop: `4px solid ${TIER_COLORS.Low}` }}>
+            <div style={s.kpiLabel}>Low</div>
+            <div style={{ ...s.kpiValue, color: TIER_COLORS.Low }}>{tiers.Low.toLocaleString()}</div>
+            <div style={s.kpiSub}>Awareness</div>
           </div>
         </div>
 
         {/* Charts Row */}
-        <div style={styles.chartsRow}>
-          <div style={styles.chartCard}>
-            <h3 style={styles.chartTitle}>Intent Distribution</h3>
+        <div style={s.chartsRow}>
+          <div style={s.chartCard}>
+            <h3 style={s.chartTitle}>Intent Distribution</h3>
             <div style={{ height: 260 }}>
               <canvas ref={tierChartRef}></canvas>
             </div>
           </div>
-          <div style={styles.chartCard}>
-            <h3 style={styles.chartTitle}>Traffic Sources</h3>
+          <div style={s.chartCard}>
+            <h3 style={s.chartTitle}>Traffic Sources</h3>
             <div style={{ height: 260 }}>
               <canvas ref={sourceChartRef}></canvas>
             </div>
@@ -361,29 +395,29 @@ export default function DashboardClient({ data }) {
         </div>
 
         {/* Interests Chart */}
-        <div style={styles.fullCard}>
-          <h3 style={styles.chartTitle}>Top Conditions & Procedures Researched</h3>
+        <div style={s.fullCard}>
+          <h3 style={s.chartTitle}>Top Conditions & Procedures Researched</h3>
           <div style={{ height: Math.max(300, Math.min(interests.length, 15) * 32) }}>
             <canvas ref={interestChartRef}></canvas>
           </div>
         </div>
 
         {/* Visitor Table */}
-        <div style={styles.fullCard}>
-          <div style={styles.tableHeader}>
-            <h3 style={styles.chartTitle}>High-Intent Visitors</h3>
-            <div style={styles.tableControls}>
+        <div style={s.fullCard}>
+          <div style={s.tableHeader}>
+            <h3 style={s.chartTitle}>High-Intent Visitors</h3>
+            <div style={s.tableControls}>
               <input
                 type="text"
                 placeholder="Search name, city, interest..."
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                style={styles.searchInput}
+                style={s.searchInput}
               />
               <select
                 value={filter}
                 onChange={(e) => { setFilter(e.target.value); setCurrentPage(1); }}
-                style={styles.filterSelect}
+                style={s.filterSelect}
               >
                 <option value="ALL">All Tiers</option>
                 <option value="HOT">HOT Only</option>
@@ -395,8 +429,8 @@ export default function DashboardClient({ data }) {
           </div>
 
           {/* Download buttons row */}
-          <div style={styles.downloadRow}>
-            <span style={styles.downloadLabel}>
+          <div style={s.downloadRow}>
+            <span style={s.downloadLabel}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: 4 }}>
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
@@ -404,63 +438,63 @@ export default function DashboardClient({ data }) {
               </svg>
               Download:
             </span>
-            <button onClick={() => downloadCSV(null)} style={styles.downloadBtn} title="Download all visible visitors">
+            <button onClick={() => downloadCSV(null)} style={s.downloadBtn} title="Download all visible visitors">
               All ({filtered.length})
             </button>
-            <button onClick={() => downloadCSV(['HOT', 'High'])} style={{ ...styles.downloadBtn, backgroundColor: '#dc2626', borderColor: '#dc2626' }} title="Download HOT + High tier visitors">
+            <button onClick={() => downloadCSV(['HOT', 'High'])} style={{ ...s.downloadBtn, backgroundColor: '#dc2626', borderColor: '#dc2626' }} title="Download HOT + High tier visitors">
               HOT + High ({countByTiers(['HOT', 'High'])})
             </button>
-            <button onClick={() => downloadCSV(['HOT', 'High', 'Medium'])} style={{ ...styles.downloadBtn, backgroundColor: '#f59e0b', borderColor: '#f59e0b', color: '#1e293b' }} title="Download HOT + High + Medium tier visitors">
+            <button onClick={() => downloadCSV(['HOT', 'High', 'Medium'])} style={{ ...s.downloadBtn, backgroundColor: '#f59e0b', borderColor: '#f59e0b', color: '#1e293b' }} title="Download HOT + High + Medium tier visitors">
               HOT + High + Med ({countByTiers(['HOT', 'High', 'Medium'])})
             </button>
-            <button onClick={() => downloadCSV(['HOT'])} style={{ ...styles.downloadBtn, backgroundColor: '#fff', borderColor: '#dc2626', color: '#dc2626' }} title="Download HOT tier only">
+            <button onClick={() => downloadCSV(['HOT'])} style={{ ...s.downloadBtn, backgroundColor: darkMode ? '#1e293b' : '#fff', borderColor: '#dc2626', color: '#dc2626' }} title="Download HOT tier only">
               HOT Only ({countByTiers(['HOT'])})
             </button>
           </div>
 
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
+          <div style={s.tableWrap}>
+            <table style={s.table}>
               <thead>
                 <tr>
-                  <th style={styles.th}>{showFullNames ? 'Name / Email' : 'Name'}</th>
-                  <th style={styles.th}>Location</th>
-                  <th style={styles.th}>Score</th>
-                  <th style={styles.th}>Tier</th>
-                  <th style={styles.th}>Confidence</th>
-                  <th style={styles.th}>Interests</th>
-                  <th style={styles.th}>Source</th>
-                  <th style={styles.th}>Visits</th>
-                  <th style={styles.th}>Last Seen</th>
+                  <th style={s.th}>{showFullNames ? 'Name / Email' : 'Name'}</th>
+                  <th style={s.th}>Location</th>
+                  <th style={s.th}>Score</th>
+                  <th style={s.th}>Tier</th>
+                  <th style={s.th}>Confidence</th>
+                  <th style={s.th}>Interests</th>
+                  <th style={s.th}>Source</th>
+                  <th style={s.th}>Visits</th>
+                  <th style={s.th}>Last Seen</th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((v, i) => (
-                  <tr key={v.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                    <td style={styles.td}>
-                      <a href={`${pathname}/visitor/${v.id}`} style={styles.nameLink}>
+                  <tr key={v.id} style={i % 2 === 0 ? s.trEven : s.trOdd}>
+                    <td style={s.td}>
+                      <a href={`${pathname}/visitor/${v.id}`} style={s.nameLink}>
                         {showFullNames
                           ? `${v.first_name} ${v.last_name}`.trim()
                           : `${v.first_name} ${v.last_initial}.`
                         }
                       </a>
                       {showFullNames && v.email && (
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{v.email}</div>
+                        <div style={{ fontSize: 11, color: darkMode ? '#64748b' : '#94a3b8', marginTop: 2 }}>{v.email}</div>
                       )}
                     </td>
-                    <td style={styles.td}>{[v.city, v.state].filter(Boolean).join(', ') || '-'}</td>
-                    <td style={{ ...styles.td, fontWeight: 600 }}>{v.intent_score}</td>
-                    <td style={styles.td}>
+                    <td style={s.td}>{[v.city, v.state].filter(Boolean).join(', ') || '-'}</td>
+                    <td style={{ ...s.td, fontWeight: 600 }}>{v.intent_score}</td>
+                    <td style={s.td}>
                       <span style={{
-                        ...styles.tierBadge,
+                        ...s.tierBadge,
                         backgroundColor: TIER_COLORS[v.intent_tier] || '#94a3b8',
                       }}>
                         {v.intent_tier}
                       </span>
                     </td>
-                    <td style={styles.td}>
+                    <td style={s.td}>
                       {v.confidence ? (
                         <span style={{
-                          ...styles.tierBadge,
+                          ...s.tierBadge,
                           backgroundColor: v.confidence === 'High' ? '#16a34a' : v.confidence === 'Medium' ? '#d97706' : '#dc2626',
                           fontSize: 10,
                         }}>
@@ -468,17 +502,17 @@ export default function DashboardClient({ data }) {
                         </span>
                       ) : '-'}
                     </td>
-                    <td style={{ ...styles.td, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <td style={{ ...s.td, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {(v.interests || []).join(', ') || '-'}
                     </td>
-                    <td style={styles.td}>{v.referrer_source || 'Direct'}</td>
-                    <td style={{ ...styles.td, textAlign: 'center' }}>{v.visit_count}</td>
-                    <td style={styles.td}>{fmtDate(v.last_visit)}</td>
+                    <td style={s.td}>{v.referrer_source || 'Direct'}</td>
+                    <td style={{ ...s.td, textAlign: 'center' }}>{v.visit_count}</td>
+                    <td style={s.td}>{fmtDate(v.last_visit)}</td>
                   </tr>
                 ))}
                 {paginated.length === 0 && (
                   <tr>
-                    <td colSpan={9} style={{ ...styles.td, textAlign: 'center', color: '#999' }}>
+                    <td colSpan={9} style={{ ...s.td, textAlign: 'center', color: darkMode ? '#64748b' : '#999' }}>
                       No visitors match this filter.
                     </td>
                   </tr>
@@ -489,21 +523,21 @@ export default function DashboardClient({ data }) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div style={styles.pagination}>
+            <div style={s.pagination}>
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                style={styles.pageBtn}
+                style={s.pageBtn}
               >
                 Previous
               </button>
-              <span style={styles.pageInfo}>
+              <span style={s.pageInfo}>
                 Page {currentPage} of {totalPages} ({filtered.length} visitors{activeState && clientGeo ? ` in ${clientGeo.label}` : ''})
               </span>
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                style={styles.pageBtn}
+                style={s.pageBtn}
               >
                 Next
               </button>
@@ -512,7 +546,7 @@ export default function DashboardClient({ data }) {
         </div>
 
         {/* Footer */}
-        <footer style={styles.footer}>
+        <footer style={s.footer}>
           <p>P5 Marketing &bull; VisitorID&trade; &bull; Powered by Audience Lab + AI Scoring</p>
           <p style={{ fontSize: 12, marginTop: 4 }}>
             Data refreshes automatically with each processing run. Reload page for latest data.
@@ -734,4 +768,38 @@ const styles = {
     color: '#94a3b8',
     fontSize: 13,
   },
+};
+
+/* ── Dark mode overrides ── */
+const darkStyles = {
+  page: { backgroundColor: '#0f172a', color: '#e2e8f0' },
+  h1: { color: '#f8fafc' },
+  logo: { backgroundColor: '#818cf8' },
+  subtitle: { color: '#94a3b8' },
+  dateRange: { color: '#cbd5e1' },
+  lastUpdated: { color: '#64748b' },
+  logoutBtn: { color: '#94a3b8', borderColor: '#334155' },
+  dateWindowBtn: { borderColor: '#334155' },
+  kpiCard: { backgroundColor: '#1e293b', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' },
+  kpiLabel: { color: '#94a3b8' },
+  kpiValue: { color: '#f8fafc' },
+  kpiSub: { color: '#64748b' },
+  chartCard: { backgroundColor: '#1e293b', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' },
+  fullCard: { backgroundColor: '#1e293b', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' },
+  chartTitle: { color: '#cbd5e1' },
+  searchInput: { backgroundColor: '#0f172a', borderColor: '#334155', color: '#e2e8f0' },
+  filterSelect: { backgroundColor: '#0f172a', borderColor: '#334155', color: '#e2e8f0' },
+  downloadRow: { borderBottomColor: '#334155' },
+  downloadLabel: { color: '#94a3b8' },
+  downloadBtn: { backgroundColor: '#818cf8', borderColor: '#818cf8' },
+  stateBtn: { borderColor: '#334155' },
+  th: { borderBottomColor: '#334155', color: '#94a3b8' },
+  td: { borderBottomColor: '#1e293b', color: '#cbd5e1' },
+  trEven: { backgroundColor: '#1e293b' },
+  trOdd: { backgroundColor: '#162032' },
+  nameLink: { color: '#a5b4fc' },
+  pagination: { borderTopColor: '#334155' },
+  pageBtn: { backgroundColor: '#1e293b', borderColor: '#334155', color: '#e2e8f0' },
+  pageInfo: { color: '#94a3b8' },
+  footer: { color: '#64748b' },
 };
