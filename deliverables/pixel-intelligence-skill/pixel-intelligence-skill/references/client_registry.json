@@ -1,0 +1,34 @@
+{
+  "clients": {
+    "sa-spine": {
+      "name": "SA Spine",
+      "domain": "saspine.com",
+      "vertical": "spine-surgery",
+      "taxonomy_file": "taxonomy_sa_spine.json"
+    },
+    "plastic-surgery-generic": {
+      "name": "Plastic Surgery (Generic)",
+      "domain": null,
+      "vertical": "plastic-surgery",
+      "taxonomy_file": "taxonomy_plastic_surgery.json"
+    },
+    "az-breasts": {
+      "name": "AZ Breasts",
+      "domain": "azbreasts.com",
+      "vertical": "plastic-surgery",
+      "taxonomy_file": "taxonomy_az_breasts.json"
+    },
+    "four-winds": {
+      "name": "Four Winds CMMS",
+      "domain": "fourwindscmms.com",
+      "vertical": "b2b-saas",
+      "taxonomy_file": "taxonomy_four_winds.json"
+    },
+    "tbr": {
+      "name": "The Brilliance Revolution",
+      "domain": "thebrilliancerevolution.com",
+      "vertical": "coaching",
+      "taxonomy_file": "taxonomy_tbr.json"
+    }
+  }
+}
