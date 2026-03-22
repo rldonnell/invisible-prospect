@@ -45,7 +45,7 @@ export default function LoginForm({ clientKey, clientName }) {
             </svg>
           </div>
         </div>
-        <h1 style={styles.title}>Invisible Patient Intelligence</h1>
+        <h1 style={styles.title}>VisitorID<sup style={{ fontSize: '0.5em', verticalAlign: 'super' }}>&trade;</sup></h1>
         <p style={styles.subtitle}>{clientName}</p>
 
         <form onSubmit={handleSubmit} style={styles.form}>

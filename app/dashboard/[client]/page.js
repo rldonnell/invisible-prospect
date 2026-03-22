@@ -19,7 +19,7 @@ export async function generateMetadata({ params }) {
   const { client } = params;
   const name = client.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   return {
-    title: `${name} - Invisible Patient Intelligence`,
+    title: `${name} - VisitorID\u2122`,
   };
 }
 

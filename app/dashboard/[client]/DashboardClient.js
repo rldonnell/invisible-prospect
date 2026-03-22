@@ -180,7 +180,7 @@ export default function DashboardClient({ data }) {
         <header style={styles.header}>
           <div>
             <h1 style={styles.h1}>
-              <span style={styles.logo}>P5</span> Invisible Patient Intelligence
+              <span style={styles.logo}>P5</span> VisitorID<sup style={{ fontSize: '0.5em', verticalAlign: 'super' }}>&trade;</sup>
             </h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <p style={styles.subtitle}>{clientName}</p>
@@ -426,7 +426,7 @@ export default function DashboardClient({ data }) {
 
         {/* Footer */}
         <footer style={styles.footer}>
-          <p>P5 Marketing &bull; Invisible Patient Intelligence &bull; Powered by Audience Lab + AI Scoring</p>
+          <p>P5 Marketing &bull; VisitorID&trade; &bull; Powered by Audience Lab + AI Scoring</p>
           <p style={{ fontSize: 12, marginTop: 4 }}>
             Data refreshes automatically with each processing run. Reload page for latest data.
           </p>

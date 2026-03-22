@@ -357,7 +357,7 @@ export default function VisitorProfile({ visitor, clientKey }) {
 
       {/* Footer */}
       <footer style={styles.footer}>
-        <p>P5 Marketing &bull; Invisible Patient Intelligence &bull; Visitor ID: {v.id}</p>
+        <p>P5 Marketing &bull; VisitorID&trade; &bull; Visitor ID: {v.id}</p>
         <p style={{ fontSize: 11, marginTop: 2 }}>Processed: {fmtDate(v.processed_at)}</p>
       </footer>
     </div>
