@@ -183,6 +183,7 @@ export async function GET(request) {
         WHERE client_key = ${clientKey}
           AND processed = TRUE AND ghl_pushed = FALSE
           AND intent_tier IN ('HOT', 'High', 'Medium')
+          AND confidence IN ('High', 'Medium')
       `;
 
       // Log the push run
@@ -193,7 +194,7 @@ export async function GET(request) {
       `;
 
       // Query a BATCH of processed visitors that haven't been pushed yet
-      // Only push Medium+ tier (skip Low to reduce noise)
+      // Only push Medium+ intent AND Medium+ confidence (skip fakes/spam)
       const toPush = await sql`
         SELECT id, email, first_name, last_name, phone,
                city, state, address, zip, visit_count, last_visit,
@@ -207,6 +208,7 @@ export async function GET(request) {
           AND processed = TRUE
           AND ghl_pushed = FALSE
           AND intent_tier IN ('HOT', 'High', 'Medium')
+          AND confidence IN ('High', 'Medium')
         ORDER BY intent_score DESC
         LIMIT ${batchSize}
       `;

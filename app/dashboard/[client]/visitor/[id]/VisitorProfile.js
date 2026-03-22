@@ -246,12 +246,14 @@ export default function VisitorProfile({ visitor, clientKey }) {
                   </div>
                   <div style={styles.tagWrap}>
                     {confidenceFlags.map((flag, i) => {
-                      const isPositive = ['name-matches-email', 'multi-page-depth', 'has-enrichment', 'in-market', 'phone-matches-state'].includes(flag);
+                      const isPositive = ['name-matches-email', 'multi-page-depth', 'has-enrichment', 'in-market', 'phone-matches-state', 'has-research-interest'].includes(flag);
+                      const isSevere = ['fake-name-detected', 'fake-phone-555', 'suspicious-email', 'extreme-visit-count'].includes(flag);
                       return (
                         <span key={i} style={{
                           ...styles.systemTag,
-                          backgroundColor: isPositive ? '#dcfce7' : '#fef2f2',
-                          color: isPositive ? '#166534' : '#991b1b',
+                          backgroundColor: isPositive ? '#dcfce7' : isSevere ? '#fecaca' : '#fef2f2',
+                          color: isPositive ? '#166534' : isSevere ? '#7f1d1d' : '#991b1b',
+                          fontWeight: isSevere ? 'bold' : 'normal',
                         }}>
                           {isPositive ? '+' : '-'} {flag.replace(/-/g, ' ')}
                         </span>
