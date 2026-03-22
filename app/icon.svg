@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Left loop of bow -->
+  <path d="M32 28 C26 10, 6 8, 6 22 C6 34, 22 36, 32 28Z" fill="#3b82f6" />
+  <!-- Right loop of bow -->
+  <path d="M32 28 C38 10, 58 8, 58 22 C58 34, 42 36, 32 28Z" fill="#2563eb" />
+  <!-- Center knot -->
+  <ellipse cx="32" cy="28" rx="5" ry="6" fill="#1e40af" />
+  <!-- Left tail -->
+  <path d="M28 32 C22 42, 16 56, 12 58 C14 50, 20 40, 28 32Z" fill="#3b82f6" />
+  <!-- Right tail -->
+  <path d="M36 32 C42 42, 48 56, 52 58 C50 50, 44 40, 36 32Z" fill="#2563eb" />
+</svg>
