@@ -20,7 +20,7 @@ import { getDb } from '../../../../lib/db';
 
 const AL_BASE = 'https://api.audiencelab.io';
 const PAGE_SIZE = 200;
-const LOOKBACK_HOURS = 25; // slight overlap to avoid gaps
+const DEFAULT_LOOKBACK_HOURS = 169; // 7 days + 1 hour overlap
 
 export async function GET(request) {
   // Verify cron secret
@@ -46,7 +46,10 @@ export async function GET(request) {
   }
 
   const sql = getDb();
-  const cutoff = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000);
+  // Allow override via ?hours=168 query param (e.g., for backfill)
+  const url = new URL(request.url);
+  const lookbackHours = parseInt(url.searchParams.get('hours')) || DEFAULT_LOOKBACK_HOURS;
+  const cutoff = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
   const results = {};
 
   for (const [clientKey, segmentId] of Object.entries(segmentMap)) {
@@ -232,9 +235,9 @@ export async function GET(request) {
         hasMore = json.has_more && records.length > 0;
         page++;
 
-        // Safety: if we've gone through many pages of old data, stop early
-        if (filtered > fetched * 0.8 && fetched > PAGE_SIZE * 3) {
-          console.log(`[${clientKey}] Stopping early — most records older than cutoff`);
+        // Safety: stop if 95%+ of records are outside the window after many pages
+        if (filtered > fetched * 0.95 && fetched > PAGE_SIZE * 10) {
+          console.log(`[${clientKey}] Stopping early — most records older than cutoff (${filtered}/${fetched} filtered)`);
           break;
         }
       }
