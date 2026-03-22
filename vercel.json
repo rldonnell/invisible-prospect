@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/pull-audiencelab",
+      "schedule": "0 5 * * *"
+    },
+    {
       "path": "/api/cron/process-visitors",
       "schedule": "0 6 * * *"
     },
