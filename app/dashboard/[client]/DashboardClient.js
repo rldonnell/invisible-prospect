@@ -32,7 +32,7 @@ export default function DashboardClient({ data }) {
   const [filter, setFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dark') === '1');
   const pageSize = 20;
 
   const {
@@ -471,7 +471,7 @@ export default function DashboardClient({ data }) {
                 {paginated.map((v, i) => (
                   <tr key={v.id} style={i % 2 === 0 ? s.trEven : s.trOdd}>
                     <td style={s.td}>
-                      <a href={`${pathname}/visitor/${v.id}`} style={s.nameLink}>
+                      <a href={`${pathname}/visitor/${v.id}${darkMode ? '?dark=1' : ''}`} style={s.nameLink}>
                         {showFullNames
                           ? `${v.first_name} ${v.last_name}`.trim()
                           : `${v.first_name} ${v.last_initial}.`

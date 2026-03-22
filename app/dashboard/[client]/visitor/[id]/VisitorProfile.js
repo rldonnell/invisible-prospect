@@ -64,7 +64,7 @@ export default function VisitorProfile({ visitor, clientKey }) {
     <div style={s.page}>
       {/* Back link + Dark mode toggle */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <a href={`/dashboard/${clientKey}`} style={s.backLink}>
+        <a href={`/dashboard/${clientKey}${darkMode ? '?dark=1' : ''}`} style={s.backLink}>
           &larr; Back to Dashboard
         </a>
         <button
