@@ -12,9 +12,18 @@ import { getDb } from '../../../../lib/db';
 
 const GHL_BASE = 'https://services.leadconnectorhq.com';
 
-async function ghlFetch(path, options = {}) {
-  const apiKey = process.env.GHL_API_KEY;
-  if (!apiKey) throw new Error('GHL_API_KEY not configured');
+/**
+ * Resolve the GHL API key for a given client.
+ * Checks for per-client key first (GHL_API_KEY_FOUR_WINDS),
+ * then falls back to the shared agency-level GHL_API_KEY.
+ */
+function resolveApiKey(clientKey) {
+  const envKey = `GHL_API_KEY_${clientKey.replace(/-/g, '_').toUpperCase()}`;
+  return process.env[envKey] || process.env.GHL_API_KEY || '';
+}
+
+async function ghlFetch(path, apiKey, options = {}) {
+  if (!apiKey) throw new Error('GHL API key not configured');
 
   const res = await fetch(`${GHL_BASE}${path}`, {
     ...options,
@@ -34,10 +43,11 @@ async function ghlFetch(path, options = {}) {
   return res.json();
 }
 
-async function findContact(email, locationId) {
+async function findContact(email, locationId, apiKey) {
   try {
     const data = await ghlFetch(
-      `/contacts/?locationId=${locationId}&query=${encodeURIComponent(email)}&limit=1`
+      `/contacts/?locationId=${locationId}&query=${encodeURIComponent(email)}&limit=1`,
+      apiKey
     );
     return data.contacts?.[0] || null;
   } catch (e) {
@@ -95,8 +105,8 @@ function buildTags(visitor) {
   return tags;
 }
 
-async function createContact(visitor, locationId) {
-  return ghlFetch('/contacts/', {
+async function createContact(visitor, locationId, apiKey) {
+  return ghlFetch('/contacts/', apiKey, {
     method: 'POST',
     body: JSON.stringify({
       locationId,
@@ -115,8 +125,8 @@ async function createContact(visitor, locationId) {
   });
 }
 
-async function updateContact(contactId, visitor, locationId) {
-  return ghlFetch(`/contacts/${contactId}`, {
+async function updateContact(contactId, visitor, locationId, apiKey) {
+  return ghlFetch(`/contacts/${contactId}`, apiKey, {
     method: 'PUT',
     body: JSON.stringify({
       locationId,
@@ -149,14 +159,16 @@ export async function GET(request) {
 
     const defaultLocationId = process.env.GHL_LOCATION_ID;
 
-    const apiKeyRaw = process.env.GHL_API_KEY || '';
-    if (!apiKeyRaw) {
-      return Response.json({ error: 'GHL_API_KEY not configured' }, { status: 400 });
-    }
-
     const results = {};
 
     for (const clientKey of activeClients) {
+      // Resolve per-client API key (falls back to shared GHL_API_KEY)
+      const apiKey = resolveApiKey(clientKey);
+      if (!apiKey) {
+        results[clientKey] = { error: 'No GHL API key configured' };
+        continue;
+      }
+
       const envKey = `GHL_LOCATION_${clientKey.replace(/-/g, '_').toUpperCase()}`;
       const locationId = process.env[envKey] || defaultLocationId;
 
@@ -217,15 +229,15 @@ export async function GET(request) {
             continue;
           }
 
-          const existing = await findContact(visitor.email, locationId);
+          const existing = await findContact(visitor.email, locationId, apiKey);
 
           let ghlContactId = null;
           if (existing) {
-            await updateContact(existing.id, visitor, locationId);
+            await updateContact(existing.id, visitor, locationId, apiKey);
             ghlContactId = existing.id;
             updated++;
           } else {
-            const result = await createContact(visitor, locationId);
+            const result = await createContact(visitor, locationId, apiKey);
             ghlContactId = result.contact?.id || null;
             created++;
           }

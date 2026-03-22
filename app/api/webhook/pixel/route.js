@@ -19,9 +19,16 @@ import { getDb } from '../../../../lib/db';
  * normalized lowercase names for flexibility.
  */
 export async function POST(request) {
-  // Auth guard
+  // Auth guard — accepts either:
+  //   Authorization: Bearer <secret>   (standard)
+  //   x-webhook-secret: <secret>       (Audience Lab compat)
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.WEBHOOK_SECRET}`) {
+  const xSecret = request.headers.get('x-webhook-secret');
+  const secret = process.env.WEBHOOK_SECRET;
+  const authorized =
+    authHeader === `Bearer ${secret}` ||
+    xSecret === secret;
+  if (!authorized) {
     return new Response('Unauthorized', { status: 401 });
   }
 
