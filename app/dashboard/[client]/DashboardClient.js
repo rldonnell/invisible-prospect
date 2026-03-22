@@ -169,6 +169,51 @@ export default function DashboardClient({ data }) {
     catch { return d; }
   };
 
+  // CSV download — exports the currently filtered visitor list
+  const downloadCSV = () => {
+    const escCSV = (val) => {
+      const s = String(val ?? '');
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? '"' + s.replace(/"/g, '""') + '"'
+        : s;
+    };
+
+    const headers = [
+      'Name', 'Email', 'City', 'State', 'Score', 'Tier',
+      'Confidence', 'Interests', 'Source', 'Visits', 'Last Seen',
+    ];
+
+    const rows = filtered.map(v => [
+      showFullNames ? `${v.first_name} ${v.last_name}`.trim() : `${v.first_name} ${v.last_initial}.`,
+      showFullNames ? (v.email || '') : '',
+      v.city || '',
+      v.state || '',
+      v.intent_score,
+      v.intent_tier,
+      v.confidence || '',
+      (v.interests || []).join('; '),
+      v.referrer_source || 'Direct',
+      v.visit_count,
+      v.last_visit ? new Date(v.last_visit).toLocaleDateString('en-US') : '',
+    ]);
+
+    const csv = [headers, ...rows].map(row => row.map(escCSV).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+
+    // Build descriptive filename
+    const parts = [data.clientKey];
+    if (filter !== 'ALL') parts.push(filter.toLowerCase());
+    if (activeState) parts.push(activeState.toLowerCase());
+    parts.push(activeDays === 'all' ? 'all-time' : `${activeDays}d`);
+    parts.push(new Date().toISOString().split('T')[0]);
+    a.href = url;
+    a.download = `visitorid-${parts.join('-')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <Script
@@ -328,6 +373,14 @@ export default function DashboardClient({ data }) {
                 <option value="Medium">Medium Only</option>
                 <option value="Low">Low Only</option>
               </select>
+              <button onClick={downloadCSV} style={styles.downloadBtn} title="Download filtered visitors as CSV">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}>
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Download CSV ({filtered.length})
+              </button>
             </div>
           </div>
 
@@ -568,6 +621,18 @@ const styles = {
     fontSize: 13,
     outline: 'none',
     backgroundColor: '#fff',
+  },
+  downloadBtn: {
+    padding: '8px 14px',
+    borderRadius: 8,
+    border: '1px solid #6366f1',
+    backgroundColor: '#6366f1',
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s ease',
   },
   tableWrap: { overflowX: 'auto' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
