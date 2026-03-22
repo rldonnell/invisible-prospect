@@ -18,7 +18,7 @@ export async function POST(request) {
       );
     }
 
-    const { valid, role } = validatePassword(client, password);
+    const { valid, role } = await validatePassword(client, password);
 
     if (!valid) {
       return NextResponse.json(
