@@ -169,8 +169,8 @@ export default function DashboardClient({ data }) {
     catch { return d; }
   };
 
-  // CSV download — exports the currently filtered visitor list
-  const downloadCSV = () => {
+  // CSV download — accepts optional tier list to override the current filter
+  const downloadCSV = (tiers = null) => {
     const escCSV = (val) => {
       const s = String(val ?? '');
       return s.includes(',') || s.includes('"') || s.includes('\n')
@@ -178,12 +178,26 @@ export default function DashboardClient({ data }) {
         : s;
     };
 
+    // If specific tiers are passed, filter from the full topVisitors list
+    // (which already has date range + state applied server-side).
+    // If null, use the current filtered list (respects tier dropdown + search).
+    let exportList;
+    let tierLabel;
+    if (tiers) {
+      const tierSet = new Set(tiers);
+      exportList = topVisitors.filter(v => tierSet.has(v.intent_tier));
+      tierLabel = tiers.map(t => t.toLowerCase()).join('-');
+    } else {
+      exportList = filtered;
+      tierLabel = filter !== 'ALL' ? filter.toLowerCase() : 'all';
+    }
+
     const headers = [
       'Name', 'Email', 'City', 'State', 'Score', 'Tier',
       'Confidence', 'Interests', 'Source', 'Visits', 'Last Seen',
     ];
 
-    const rows = filtered.map(v => [
+    const rows = exportList.map(v => [
       showFullNames ? `${v.first_name} ${v.last_name}`.trim() : `${v.first_name} ${v.last_initial}.`,
       showFullNames ? (v.email || '') : '',
       v.city || '',
@@ -203,8 +217,7 @@ export default function DashboardClient({ data }) {
     const a = document.createElement('a');
 
     // Build descriptive filename
-    const parts = [data.clientKey];
-    if (filter !== 'ALL') parts.push(filter.toLowerCase());
+    const parts = [data.clientKey, tierLabel];
     if (activeState) parts.push(activeState.toLowerCase());
     parts.push(activeDays === 'all' ? 'all-time' : `${activeDays}d`);
     parts.push(new Date().toISOString().split('T')[0]);
@@ -212,7 +225,12 @@ export default function DashboardClient({ data }) {
     a.download = `visitorid-${parts.join('-')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+
+    return exportList.length;
   };
+
+  // Preset download counts (for button labels)
+  const countByTiers = (tierList) => topVisitors.filter(v => tierList.includes(v.intent_tier)).length;
 
   return (
     <>
@@ -373,15 +391,31 @@ export default function DashboardClient({ data }) {
                 <option value="Medium">Medium Only</option>
                 <option value="Low">Low Only</option>
               </select>
-              <button onClick={downloadCSV} style={styles.downloadBtn} title="Download filtered visitors as CSV">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: 'middle' }}>
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                Download CSV ({filtered.length})
-              </button>
             </div>
+          </div>
+
+          {/* Download buttons row */}
+          <div style={styles.downloadRow}>
+            <span style={styles.downloadLabel}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', marginRight: 4 }}>
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download:
+            </span>
+            <button onClick={() => downloadCSV(null)} style={styles.downloadBtn} title="Download all visible visitors">
+              All ({filtered.length})
+            </button>
+            <button onClick={() => downloadCSV(['HOT', 'High'])} style={{ ...styles.downloadBtn, backgroundColor: '#dc2626', borderColor: '#dc2626' }} title="Download HOT + High tier visitors">
+              HOT + High ({countByTiers(['HOT', 'High'])})
+            </button>
+            <button onClick={() => downloadCSV(['HOT', 'High', 'Medium'])} style={{ ...styles.downloadBtn, backgroundColor: '#f59e0b', borderColor: '#f59e0b', color: '#1e293b' }} title="Download HOT + High + Medium tier visitors">
+              HOT + High + Med ({countByTiers(['HOT', 'High', 'Medium'])})
+            </button>
+            <button onClick={() => downloadCSV(['HOT'])} style={{ ...styles.downloadBtn, backgroundColor: '#fff', borderColor: '#dc2626', color: '#dc2626' }} title="Download HOT tier only">
+              HOT Only ({countByTiers(['HOT'])})
+            </button>
           </div>
 
           <div style={styles.tableWrap}>
@@ -622,13 +656,28 @@ const styles = {
     outline: 'none',
     backgroundColor: '#fff',
   },
+  downloadRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottom: '1px solid #f1f5f9',
+  },
+  downloadLabel: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#64748b',
+    marginRight: 4,
+  },
   downloadBtn: {
-    padding: '8px 14px',
+    padding: '6px 12px',
     borderRadius: 8,
     border: '1px solid #6366f1',
     backgroundColor: '#6366f1',
     color: '#fff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 600,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
