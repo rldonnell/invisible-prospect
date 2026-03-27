@@ -43,21 +43,91 @@ async function ghlFetch(path, apiKey, options = {}) {
   return res.json();
 }
 
-async function findContact(email, locationId, apiKey) {
+// ─── Custom Field Management ───
+// Cache: locationId → { fieldName → ghlFieldId }
+const customFieldCache = {};
+
+/**
+ * Ensure all pixel custom fields exist in GHL for this location.
+ * Creates any missing fields and returns a map of name → GHL field ID.
+ */
+async function ensureCustomFields(locationId, apiKey) {
+  // Return cached if available (within same invocation)
+  if (customFieldCache[locationId]) return customFieldCache[locationId];
+
+  const fieldMap = {};
+
+  // Fetch existing custom fields
+  let existing = [];
   try {
-    const data = await ghlFetch(
-      `/contacts/?locationId=${locationId}&query=${encodeURIComponent(email)}&limit=1`,
-      apiKey
-    );
-    return data.contacts?.[0] || null;
+    const data = await ghlFetch(`/locations/${locationId}/customFields`, apiKey);
+    existing = data.customFields || [];
   } catch (e) {
-    console.error(`GHL lookup failed for ${email}:`, e.message);
-    return null;
+    console.error('Failed to fetch custom fields:', e.message);
+    // Return empty map — will fall back to key-based fields
+    return fieldMap;
   }
+
+  // Fields we need in GHL
+  const neededFields = [
+    { name: 'Pixel Score', dataType: 'TEXT', key: 'pixel_score' },
+    { name: 'Pixel Tier', dataType: 'TEXT', key: 'pixel_tier' },
+    { name: 'Pixel Source', dataType: 'TEXT', key: 'pixel_source' },
+    { name: 'Pixel Visits', dataType: 'TEXT', key: 'pixel_visits' },
+    { name: 'Pixel Last Seen', dataType: 'TEXT', key: 'pixel_last_seen' },
+    { name: 'Pixel Interests', dataType: 'TEXT', key: 'pixel_interests' },
+    { name: 'Pixel Age Range', dataType: 'TEXT', key: 'pixel_age_range' },
+    { name: 'Pixel Gender', dataType: 'TEXT', key: 'pixel_gender' },
+    { name: 'Pixel Income', dataType: 'TEXT', key: 'pixel_income' },
+    { name: 'Pixel Net Worth', dataType: 'TEXT', key: 'pixel_net_worth' },
+    { name: 'Pixel Homeowner', dataType: 'TEXT', key: 'pixel_homeowner' },
+    { name: 'Pixel Married', dataType: 'TEXT', key: 'pixel_married' },
+    { name: 'Pixel Children', dataType: 'TEXT', key: 'pixel_children' },
+    { name: 'Pixel Company', dataType: 'TEXT', key: 'pixel_company' },
+    { name: 'Pixel Job Title', dataType: 'TEXT', key: 'pixel_job_title' },
+    { name: 'Pixel Industry', dataType: 'TEXT', key: 'pixel_industry' },
+    { name: 'Pixel Confidence', dataType: 'TEXT', key: 'pixel_confidence' },
+    { name: 'Pixel Confidence Score', dataType: 'TEXT', key: 'pixel_confidence_score' },
+  ];
+
+  for (const field of neededFields) {
+    // Check if already exists (case-insensitive match on name)
+    const found = existing.find(
+      (f) => f.name.toLowerCase() === field.name.toLowerCase()
+    );
+    if (found) {
+      fieldMap[field.key] = found.id;
+    } else {
+      // Create the custom field
+      try {
+        const result = await ghlFetch(
+          `/locations/${locationId}/customFields`,
+          apiKey,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              name: field.name,
+              dataType: field.dataType,
+              placeholder: field.name,
+            }),
+          }
+        );
+        if (result.customField) {
+          fieldMap[field.key] = result.customField.id;
+          console.log(`Created GHL custom field: ${field.name} → ${result.customField.id}`);
+        }
+      } catch (e) {
+        console.warn(`Could not create custom field "${field.name}":`, e.message);
+      }
+    }
+  }
+
+  customFieldCache[locationId] = fieldMap;
+  return fieldMap;
 }
 
-function buildCustomFields(visitor) {
-  const fields = [
+function buildCustomFields(visitor, fieldMap) {
+  const entries = [
     { key: 'pixel_score', field_value: String(visitor.intent_score || 0) },
     { key: 'pixel_tier', field_value: visitor.intent_tier || 'Low' },
     { key: 'pixel_source', field_value: visitor.referrer_source || 'Direct' },
@@ -66,19 +136,27 @@ function buildCustomFields(visitor) {
     { key: 'pixel_interests', field_value: (visitor.interests || []).join(', ') },
   ];
   // Enrichment fields — only send if populated
-  if (visitor.age_range) fields.push({ key: 'pixel_age_range', field_value: visitor.age_range });
-  if (visitor.gender) fields.push({ key: 'pixel_gender', field_value: visitor.gender });
-  if (visitor.income) fields.push({ key: 'pixel_income', field_value: visitor.income });
-  if (visitor.net_worth) fields.push({ key: 'pixel_net_worth', field_value: visitor.net_worth });
-  if (visitor.homeowner) fields.push({ key: 'pixel_homeowner', field_value: visitor.homeowner });
-  if (visitor.married) fields.push({ key: 'pixel_married', field_value: visitor.married });
-  if (visitor.children) fields.push({ key: 'pixel_children', field_value: visitor.children });
-  if (visitor.company_name) fields.push({ key: 'pixel_company', field_value: visitor.company_name });
-  if (visitor.job_title) fields.push({ key: 'pixel_job_title', field_value: visitor.job_title });
-  if (visitor.company_industry) fields.push({ key: 'pixel_industry', field_value: visitor.company_industry });
-  if (visitor.confidence) fields.push({ key: 'pixel_confidence', field_value: visitor.confidence });
-  if (visitor.confidence_score) fields.push({ key: 'pixel_confidence_score', field_value: String(visitor.confidence_score) });
-  return fields;
+  if (visitor.age_range) entries.push({ key: 'pixel_age_range', field_value: visitor.age_range });
+  if (visitor.gender) entries.push({ key: 'pixel_gender', field_value: visitor.gender });
+  if (visitor.income) entries.push({ key: 'pixel_income', field_value: visitor.income });
+  if (visitor.net_worth) entries.push({ key: 'pixel_net_worth', field_value: visitor.net_worth });
+  if (visitor.homeowner) entries.push({ key: 'pixel_homeowner', field_value: visitor.homeowner });
+  if (visitor.married) entries.push({ key: 'pixel_married', field_value: visitor.married });
+  if (visitor.children) entries.push({ key: 'pixel_children', field_value: visitor.children });
+  if (visitor.company_name) entries.push({ key: 'pixel_company', field_value: visitor.company_name });
+  if (visitor.job_title) entries.push({ key: 'pixel_job_title', field_value: visitor.job_title });
+  if (visitor.company_industry) entries.push({ key: 'pixel_industry', field_value: visitor.company_industry });
+  if (visitor.confidence) entries.push({ key: 'pixel_confidence', field_value: visitor.confidence });
+  if (visitor.confidence_score) entries.push({ key: 'pixel_confidence_score', field_value: String(visitor.confidence_score) });
+
+  // Map key → GHL field ID if we have the mapping, otherwise keep key
+  return entries.map(e => {
+    if (fieldMap[e.key]) {
+      return { id: fieldMap[e.key], field_value: e.field_value };
+    }
+    // Fallback: use key (works if GHL has the field with this key)
+    return e;
+  });
 }
 
 function buildTags(visitor) {
@@ -105,7 +183,20 @@ function buildTags(visitor) {
   return tags;
 }
 
-async function createContact(visitor, locationId, apiKey) {
+async function findContact(email, locationId, apiKey) {
+  try {
+    const data = await ghlFetch(
+      `/contacts/?locationId=${locationId}&query=${encodeURIComponent(email)}&limit=1`,
+      apiKey
+    );
+    return data.contacts?.[0] || null;
+  } catch (e) {
+    console.error(`GHL lookup failed for ${email}:`, e.message);
+    return null;
+  }
+}
+
+async function createContact(visitor, locationId, apiKey, fieldMap) {
   return ghlFetch('/contacts/', apiKey, {
     method: 'POST',
     body: JSON.stringify({
@@ -119,19 +210,19 @@ async function createContact(visitor, locationId, apiKey) {
       state: visitor.state,
       postalCode: visitor.zip || '',
       tags: buildTags(visitor),
-      customFields: buildCustomFields(visitor),
+      customFields: buildCustomFields(visitor, fieldMap),
       source: 'P5 Pixel Intelligence',
     }),
   });
 }
 
-async function updateContact(contactId, visitor, locationId, apiKey) {
+async function updateContact(contactId, visitor, locationId, apiKey, fieldMap) {
   return ghlFetch(`/contacts/${contactId}`, apiKey, {
     method: 'PUT',
     body: JSON.stringify({
       locationId,
       tags: buildTags(visitor),
-      customFields: buildCustomFields(visitor),
+      customFields: buildCustomFields(visitor, fieldMap),
     }),
   });
 }
@@ -177,13 +268,18 @@ export async function GET(request) {
         continue;
       }
 
+      // Ensure custom fields exist in GHL (creates missing ones)
+      const fieldMap = await ensureCustomFields(locationId, apiKey);
+
       // Count total remaining before we start
+      // FIX: Include visitors with empty/NULL confidence (pre-confidence-scoring visitors)
+      // These are still valid — they were processed before confidence scoring was added
       const [remaining] = await sql`
         SELECT COUNT(*)::int as count FROM visitors
         WHERE client_key = ${clientKey}
           AND processed = TRUE AND ghl_pushed = FALSE
           AND intent_tier IN ('HOT', 'High', 'Medium')
-          AND confidence IN ('High', 'Medium')
+          AND (confidence IN ('High', 'Medium') OR confidence IS NULL OR confidence = '')
       `;
 
       // Log the push run
@@ -194,7 +290,8 @@ export async function GET(request) {
       `;
 
       // Query a BATCH of processed visitors that haven't been pushed yet
-      // Only push Medium+ intent AND Medium+ confidence (skip fakes/spam)
+      // Only push Medium+ intent tier
+      // Accept High/Medium confidence OR empty/NULL confidence (legacy visitors)
       const toPush = await sql`
         SELECT id, email, first_name, last_name, phone,
                city, state, address, zip, visit_count, last_visit,
@@ -208,7 +305,7 @@ export async function GET(request) {
           AND processed = TRUE
           AND ghl_pushed = FALSE
           AND intent_tier IN ('HOT', 'High', 'Medium')
-          AND confidence IN ('High', 'Medium')
+          AND (confidence IN ('High', 'Medium') OR confidence IS NULL OR confidence = '')
         ORDER BY intent_score DESC
         LIMIT ${batchSize}
       `;
@@ -235,11 +332,11 @@ export async function GET(request) {
 
           let ghlContactId = null;
           if (existing) {
-            await updateContact(existing.id, visitor, locationId, apiKey);
+            await updateContact(existing.id, visitor, locationId, apiKey, fieldMap);
             ghlContactId = existing.id;
             updated++;
           } else {
-            const result = await createContact(visitor, locationId, apiKey);
+            const result = await createContact(visitor, locationId, apiKey, fieldMap);
             ghlContactId = result.contact?.id || null;
             created++;
           }
