@@ -326,7 +326,9 @@ export default function DashboardClient({ data }) {
               </button>
             </div>
             <div style={s.dateRange}>
-              {fmtDate(dateRange.earliest)} &mdash; {fmtDate(dateRange.latest)}
+              {activeDays === 'all'
+                ? `${fmtDate(dateRange.earliest)} \u2014 ${fmtDate(dateRange.latest)}`
+                : `${fmtDate(new Date(Date.now() - parseInt(activeDays) * 86400000).toISOString())} \u2014 ${fmtDate(new Date().toISOString())}`}
             </div>
             {lastProcessed && (
               <div style={s.lastUpdated}>
