@@ -21,6 +21,30 @@ import { getDb } from '../../../../lib/db';
 const AL_BASE = 'https://api.audiencelab.io';
 const PAGE_SIZE = 200;
 const DEFAULT_LOOKBACK_HOURS = 169; // 7 days + 1 hour overlap
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF_MS = 5000; // 5 seconds, doubles each retry
+const DELAY_BETWEEN_CLIENTS_MS = 2000; // 2 seconds between clients
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Fetch with retry + exponential backoff for 429 rate limits.
+ */
+async function fetchWithRetry(url, options) {
+  let lastError;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(url, options);
+
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+      console.log(`  Rate limited (429), retrying in ${backoff / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+      await sleep(backoff);
+      continue;
+    }
+
+    return res;
+  }
+}
 
 export async function GET(request) {
   // Verify cron secret
@@ -52,7 +76,15 @@ export async function GET(request) {
   const cutoff = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
   const results = {};
 
-  for (const [clientKey, segmentId] of Object.entries(segmentMap)) {
+  const clientEntries = Object.entries(segmentMap);
+  for (let ci = 0; ci < clientEntries.length; ci++) {
+    const [clientKey, segmentId] = clientEntries[ci];
+
+    // Delay between clients to avoid rate limits (skip first)
+    if (ci > 0) {
+      await sleep(DELAY_BETWEEN_CLIENTS_MS);
+    }
+
     console.log(`[${clientKey}] Pulling segment ${segmentId}...`);
 
     let page = 1;
@@ -66,7 +98,7 @@ export async function GET(request) {
     try {
       while (hasMore) {
         const url = `${AL_BASE}/segments/${segmentId}?page=${page}&page_size=${PAGE_SIZE}`;
-        const res = await fetch(url, {
+        const res = await fetchWithRetry(url, {
           headers: { 'X-API-KEY': apiKey },
         });
 
