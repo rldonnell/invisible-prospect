@@ -186,11 +186,18 @@ export default async function DashboardPage({ params, searchParams }) {
           FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
         `;
 
-    // Last processed
+    // Last processed — show when data actually changed, not just when cron ran
     const [lastRun] = await sql`
-      SELECT completed_at::text as last_processed
+      SELECT completed_at::text as last_processed, processed as records_processed
       FROM processing_runs WHERE client_key = ${client}
       ORDER BY completed_at DESC LIMIT 1
+    `;
+
+    // Most recent visitor activity (true data freshness)
+    const [freshness] = await sql`
+      SELECT MAX(last_visit)::text as newest_visit,
+             MAX(processed_at)::text as newest_processed
+      FROM visitors WHERE client_key = ${client}
     `;
 
     // Client geo config
@@ -212,6 +219,9 @@ export default async function DashboardPage({ params, searchParams }) {
       topVisitors,
       dateRange: dateRange || {},
       lastProcessed: lastRun?.last_processed || null,
+      lastProcessedCount: lastRun?.records_processed || 0,
+      newestVisit: freshness?.newest_visit || null,
+      newestProcessed: freshness?.newest_processed || null,
       clientGeo,
       dateWindow: showAll ? 'all' : days,
       activeState: filterByState ? stateFilter : null,

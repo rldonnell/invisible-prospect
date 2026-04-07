@@ -37,7 +37,8 @@ export default function DashboardClient({ data }) {
 
   const {
     clientName, totalVisitors, allTimeTotal, tiers, interests,
-    sources, topVisitors, dateRange, lastProcessed,
+    sources, topVisitors, dateRange, lastProcessed, lastProcessedCount,
+    newestVisit, newestProcessed,
     clientGeo, dateWindow, activeState,
     isAuthenticated, authRole,
   } = data;
@@ -330,9 +331,14 @@ export default function DashboardClient({ data }) {
                 ? `${fmtDate(dateRange.earliest)} \u2014 ${fmtDate(dateRange.latest)}`
                 : `${fmtDate(new Date(Date.now() - parseInt(activeDays) * 86400000).toISOString())} \u2014 ${fmtDate(new Date().toISOString())}`}
             </div>
-            {lastProcessed && (
+            {(newestVisit || newestProcessed) && (
               <div style={s.lastUpdated}>
-                Last updated: {fmtDate(lastProcessed)}
+                Latest visitor data: {fmtDate(newestVisit || newestProcessed)}
+              </div>
+            )}
+            {lastProcessed && (
+              <div style={{ ...s.lastUpdated, fontSize: 11, marginTop: 1 }}>
+                Last cron run: {fmtDate(lastProcessed)}{lastProcessedCount > 0 ? ` (${lastProcessedCount} processed)` : ''}
               </div>
             )}
             {isAuthenticated && (

@@ -36,13 +36,6 @@ export async function GET(request) {
     const results = {};
 
     for (const clientKey of activeClients) {
-      // Log the processing run
-      const [run] = await sql`
-        INSERT INTO processing_runs (client_key, run_type)
-        VALUES (${clientKey}, 'process')
-        RETURNING id
-      `;
-
       // Fetch unprocessed visitors for this client
       const unprocessed = await sql`
         SELECT id, email, first_name, last_name, phone, city, state,
@@ -53,6 +46,17 @@ export async function GET(request) {
         WHERE client_key = ${clientKey}
           AND processed = FALSE
       `;
+
+      // Only create a processing_runs record if there's actual work to do
+      let run = null;
+      if (unprocessed.length > 0) {
+        const [r] = await sql`
+          INSERT INTO processing_runs (client_key, run_type)
+          VALUES (${clientKey}, 'process')
+          RETURNING id
+        `;
+        run = r;
+      }
 
       let processed = 0;
       let errors = 0;
@@ -115,17 +119,19 @@ export async function GET(request) {
         SELECT COUNT(*) as total FROM visitors WHERE client_key = ${clientKey}
       `;
 
-      // Update processing run log
-      await sql`
-        UPDATE processing_runs SET
-          completed_at = NOW(),
-          total_visitors = ${parseInt(countResult.total)},
-          processed = ${processed},
-          skipped = ${parseInt(countResult.total) - unprocessed.length},
-          errors = ${errors},
-          tier_counts = ${JSON.stringify(tierCounts)}::jsonb
-        WHERE id = ${run.id}
-      `;
+      // Update processing run log (only if we created one)
+      if (run) {
+        await sql`
+          UPDATE processing_runs SET
+            completed_at = NOW(),
+            total_visitors = ${parseInt(countResult.total)},
+            processed = ${processed},
+            skipped = ${parseInt(countResult.total) - unprocessed.length},
+            errors = ${errors},
+            tier_counts = ${JSON.stringify(tierCounts)}::jsonb
+          WHERE id = ${run.id}
+        `;
+      }
 
       results[clientKey] = {
         total_visitors: parseInt(countResult.total),
