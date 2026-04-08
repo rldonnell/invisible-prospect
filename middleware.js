@@ -49,24 +49,31 @@ export function middleware(request) {
     return NextResponse.next();
   }
 
+  // Map subdomains to client keys when they differ
+  // (e.g. DNS-friendly "saspine" → data key "sa-spine")
+  const SUBDOMAIN_TO_CLIENT = {
+    saspine: 'sa-spine',
+  };
+  const clientKey = SUBDOMAIN_TO_CLIENT[subdomain] || subdomain;
+
   // Root of subdomain → rewrite to /dashboard/[client]
   if (pathname === '/' || pathname === '') {
     const url = request.nextUrl.clone();
-    url.pathname = `/dashboard/${subdomain}`;
+    url.pathname = `/dashboard/${clientKey}`;
     return NextResponse.rewrite(url);
   }
 
   // Sub-pages like /reset?token=xxx → rewrite to /dashboard/[client]/reset
   if (pathname.startsWith('/reset')) {
     const url = request.nextUrl.clone();
-    url.pathname = `/dashboard/${subdomain}${pathname}`;
+    url.pathname = `/dashboard/${clientKey}${pathname}`;
     return NextResponse.rewrite(url);
   }
 
   // Visitor profile pages: /visitor/123 → /dashboard/[client]/visitor/123
   if (pathname.startsWith('/visitor')) {
     const url = request.nextUrl.clone();
-    url.pathname = `/dashboard/${subdomain}${pathname}`;
+    url.pathname = `/dashboard/${clientKey}${pathname}`;
     return NextResponse.rewrite(url);
   }
 
