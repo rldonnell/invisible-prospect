@@ -479,7 +479,7 @@ export default function DashboardClient({ data }) {
                 {paginated.map((v, i) => (
                   <tr key={v.id} style={i % 2 === 0 ? s.trEven : s.trOdd}>
                     <td style={s.td}>
-                      <a href={`${pathname}/visitor/${v.id}${darkMode ? '?dark=1' : ''}`} style={s.nameLink}>
+                      <a href={`${pathname === '/' ? '' : pathname}/visitor/${v.id}${darkMode ? '?dark=1' : ''}`} style={s.nameLink}>
                         {showFullNames
                           ? `${v.first_name} ${v.last_name}`.trim()
                           : `${v.first_name} ${v.last_initial}.`
