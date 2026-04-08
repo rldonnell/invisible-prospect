@@ -1,6 +1,6 @@
 import { getDb } from '../../../../lib/db';
 import { classifyUrl, classifyReferrer } from '../../../../lib/taxonomies';
-import { scoreIntent, extractInterests, generateTags, scoreConfidence } from '../../../../lib/scoring';
+import { scoreIntent, extractInterests, generateTags, scoreConfidence, determinePrimaryInterest, determineCampaignBucket, isEmailEligible } from '../../../../lib/scoring';
 
 /**
  * GET /api/cron/process-visitors
@@ -60,7 +60,12 @@ export async function GET(request) {
 
       let processed = 0;
       let errors = 0;
+      let emailEligibleCount = 0;
       const tierCounts = { HOT: 0, High: 0, Medium: 0, Low: 0 };
+      const bucketCounts = {
+        ready_to_book: 0, provider_research: 0, procedure_treatment: 0,
+        condition_research: 0, return_visitor: 0, general_interest: 0,
+      };
 
       for (const visitor of unprocessed) {
         try {
@@ -89,6 +94,11 @@ export async function GET(request) {
             visitor, allClassifications, clientKey
           );
 
+          // Determine primary interest and campaign bucket
+          const primaryInterest = determinePrimaryInterest(allClassifications);
+          const campaignBucket = determineCampaignBucket(allClassifications, visitor);
+          const emailEligible = isEmailEligible(visitor, campaignBucket, confidenceScore);
+
           // Write results back
           await sql`
             UPDATE visitors SET
@@ -100,12 +110,17 @@ export async function GET(request) {
               confidence = ${confidence},
               confidence_score = ${confidenceScore},
               confidence_flags = ${JSON.stringify(confidenceFlags)}::jsonb,
+              primary_interest = ${primaryInterest},
+              campaign_bucket = ${campaignBucket},
+              email_eligible = ${emailEligible},
               processed = TRUE,
               processed_at = NOW()
             WHERE id = ${visitor.id}
           `;
 
           tierCounts[tier]++;
+          if (campaignBucket) bucketCounts[campaignBucket]++;
+          if (emailEligible) emailEligibleCount++;
           processed++;
 
         } catch (visitorError) {
@@ -139,6 +154,8 @@ export async function GET(request) {
         processed,
         errors,
         tier_counts: tierCounts,
+        bucket_counts: bucketCounts,
+        email_eligible: emailEligibleCount,
       };
     }
 
