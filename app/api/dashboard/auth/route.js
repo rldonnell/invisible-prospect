@@ -36,7 +36,7 @@ export async function POST(request) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      path: '/dashboard',
+      path: '/',
       maxAge: MAX_AGE,
     });
 
@@ -60,7 +60,7 @@ export async function DELETE() {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    path: '/dashboard',
+    path: '/',
     maxAge: 0,
   });
   return response;
