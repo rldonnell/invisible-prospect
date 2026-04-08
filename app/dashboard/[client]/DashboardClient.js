@@ -65,8 +65,8 @@ export default function DashboardClient({ data }) {
   };
 
   const windowHref = (val) => buildHref({ days: val === '30' ? undefined : val });
-  const stateHref = (stateCode) => buildHref({ state: (activeState && !activeStateNegate) ? '' : stateCode });
-  const outOfStateHref = (stateCode) => buildHref({ state: (activeState && activeStateNegate) ? '' : `!${stateCode}` });
+  const stateHref = (stateCode) => buildHref({ state: stateCode });
+  const outOfStateHref = (stateCode) => buildHref({ state: `!${stateCode}` });
 
   const chartInstances = useRef([]);
 
@@ -297,6 +297,18 @@ export default function DashboardClient({ data }) {
               {clientGeo && (
                 <>
                   <span style={{ color: darkMode ? '#334155' : '#e2e8f0', fontSize: 16, margin: '0 2px' }}>|</span>
+                  <a
+                    href={buildHref({ state: '' })}
+                    style={{
+                      ...s.dateWindowBtn,
+                      backgroundColor: !activeState ? '#6366f1' : (darkMode ? '#1e293b' : '#fff'),
+                      color: !activeState ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                      borderColor: !activeState ? '#6366f1' : (darkMode ? '#334155' : '#e2e8f0'),
+                      textDecoration: 'none',
+                    }}
+                  >
+                    All
+                  </a>
                   <a
                     href={stateHref(clientGeo.code)}
                     style={{
