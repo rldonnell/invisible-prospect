@@ -7,6 +7,12 @@ export default function LoginForm({ clientKey, clientName }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Forgot password state
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -22,7 +28,6 @@ export default function LoginForm({ clientKey, clientName }) {
       const data = await res.json();
 
       if (res.ok) {
-        // Reload the page — server will now see the cookie and serve the dashboard
         window.location.reload();
       } else {
         setError(data.error || 'Invalid password');
@@ -34,6 +39,85 @@ export default function LoginForm({ clientKey, clientName }) {
     }
   };
 
+  const handleForgotPassword = async () => {
+    setForgotError('');
+    setForgotLoading(true);
+
+    try {
+      const res = await fetch('/api/dashboard/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client: clientKey }),
+      });
+
+      if (res.ok) {
+        setForgotSent(true);
+      } else {
+        setForgotError('Something went wrong. Please try again.');
+      }
+    } catch {
+      setForgotError('Connection error. Please try again.');
+    }
+
+    setForgotLoading(false);
+  };
+
+  // Forgot password view
+  if (showForgot) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.card}>
+          <div style={styles.logoRow}>
+            <div style={styles.lockIcon}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+          </div>
+          <h1 style={styles.title}>VisitorID<sup style={{ fontSize: '0.5em', verticalAlign: 'super' }}>&trade;</sup></h1>
+          <p style={styles.subtitle}>{clientName}</p>
+
+          {forgotSent ? (
+            <div>
+              <div style={styles.successBox}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                <span>If an account exists for this dashboard, a reset link has been sent to the email on file.</span>
+              </div>
+              <p style={{ fontSize: 13, color: '#64748b', marginTop: 16, lineHeight: 1.5 }}>
+                Check your inbox (and spam folder). The link expires in 2 hours.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.6, marginBottom: 24, textAlign: 'left' }}>
+                We&apos;ll send a password reset link to the email address on file for this dashboard.
+              </p>
+              {forgotError && <p style={styles.error}>{forgotError}</p>}
+              <button
+                onClick={handleForgotPassword}
+                style={styles.button}
+                disabled={forgotLoading}
+              >
+                {forgotLoading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={() => { setShowForgot(false); setForgotSent(false); setForgotError(''); }}
+            style={styles.backLink}
+          >
+            Back to Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Normal login view
   return (
     <div style={styles.page}>
       <div style={styles.card}>
@@ -64,6 +148,13 @@ export default function LoginForm({ clientKey, clientName }) {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
+        <button
+          onClick={() => setShowForgot(true)}
+          style={styles.forgotLink}
+        >
+          Forgot password?
+        </button>
 
         <p style={styles.footer}>
           Contact your P5 Marketing account manager if you need access.
@@ -152,6 +243,40 @@ const styles = {
     cursor: 'pointer',
     marginTop: 16,
     transition: 'background-color 0.2s',
+  },
+  forgotLink: {
+    display: 'block',
+    margin: '16px auto 0',
+    padding: 0,
+    border: 'none',
+    background: 'none',
+    fontSize: 13,
+    color: '#6366f1',
+    cursor: 'pointer',
+    fontWeight: 500,
+  },
+  backLink: {
+    display: 'block',
+    margin: '20px auto 0',
+    padding: 0,
+    border: 'none',
+    background: 'none',
+    fontSize: 13,
+    color: '#6366f1',
+    cursor: 'pointer',
+    fontWeight: 500,
+  },
+  successBox: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: '14px 16px',
+    backgroundColor: '#f0fdf4',
+    borderRadius: 10,
+    fontSize: 13,
+    color: '#15803d',
+    textAlign: 'left',
+    lineHeight: 1.5,
   },
   footer: {
     fontSize: 12,
