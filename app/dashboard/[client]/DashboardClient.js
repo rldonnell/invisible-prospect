@@ -39,7 +39,7 @@ export default function DashboardClient({ data }) {
     clientName, totalVisitors, allTimeTotal, tiers, interests,
     sources, topVisitors, dateRange, lastProcessed, lastProcessedCount,
     newestVisit, newestProcessed,
-    clientGeo, dateWindow, activeState,
+    clientGeo, dateWindow, activeState, activeStateNegate,
     isAuthenticated, authRole,
   } = data;
 
@@ -65,7 +65,8 @@ export default function DashboardClient({ data }) {
   };
 
   const windowHref = (val) => buildHref({ days: val === '30' ? undefined : val });
-  const stateHref = (stateCode) => buildHref({ state: activeState ? '' : stateCode });
+  const stateHref = (stateCode) => buildHref({ state: (activeState && !activeStateNegate) ? '' : stateCode });
+  const outOfStateHref = (stateCode) => buildHref({ state: (activeState && activeStateNegate) ? '' : `!${stateCode}` });
 
   const chartInstances = useRef([]);
 
@@ -229,7 +230,8 @@ export default function DashboardClient({ data }) {
 
     // Build descriptive filename
     const parts = [data.clientKey, tierLabel];
-    if (activeState) parts.push(activeState.toLowerCase());
+    if (activeState && activeStateNegate) parts.push(`not-${activeState.toLowerCase()}`);
+    else if (activeState) parts.push(activeState.toLowerCase());
     parts.push(activeDays === 'all' ? 'all-time' : `${activeDays}d`);
     parts.push(new Date().toISOString().split('T')[0]);
     a.href = url;
@@ -299,13 +301,25 @@ export default function DashboardClient({ data }) {
                     href={stateHref(clientGeo.code)}
                     style={{
                       ...s.dateWindowBtn,
-                      backgroundColor: activeState ? '#16a34a' : (darkMode ? '#1e293b' : '#fff'),
-                      color: activeState ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
-                      borderColor: activeState ? '#16a34a' : (darkMode ? '#334155' : '#e2e8f0'),
+                      backgroundColor: (activeState && !activeStateNegate) ? '#16a34a' : (darkMode ? '#1e293b' : '#fff'),
+                      color: (activeState && !activeStateNegate) ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                      borderColor: (activeState && !activeStateNegate) ? '#16a34a' : (darkMode ? '#334155' : '#e2e8f0'),
                       textDecoration: 'none',
                     }}
                   >
-                    {activeState ? `${clientGeo.label} Only` : clientGeo.label}
+                    {clientGeo.label}
+                  </a>
+                  <a
+                    href={outOfStateHref(clientGeo.code)}
+                    style={{
+                      ...s.dateWindowBtn,
+                      backgroundColor: (activeState && activeStateNegate) ? '#dc2626' : (darkMode ? '#1e293b' : '#fff'),
+                      color: (activeState && activeStateNegate) ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                      borderColor: (activeState && activeStateNegate) ? '#dc2626' : (darkMode ? '#334155' : '#e2e8f0'),
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Out of State
                   </a>
                 </>
               )}

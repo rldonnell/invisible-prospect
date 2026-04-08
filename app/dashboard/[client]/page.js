@@ -80,19 +80,27 @@ export default async function DashboardPage({ params, searchParams }) {
       ? new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
       : '2000-01-01';
 
-    // State filter — ?state=TX filters everything to Texas-only
+    // State filter — ?state=TX filters to Texas-only, ?state=!TX filters out Texas
     const stateParam = searchParams?.state || '';
-    const stateFilter = stateParam.toUpperCase();
+    const stateNegate = stateParam.startsWith('!');
+    const stateFilter = (stateNegate ? stateParam.slice(1) : stateParam).toUpperCase();
     const filterByState = stateFilter.length === 2;
 
     // Tier counts
     const tierRows = filterByState
-      ? await sql`
-          SELECT intent_tier, COUNT(*)::int as count
-          FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
-            AND UPPER(state) = ${stateFilter}
-          GROUP BY intent_tier
-        `
+      ? (stateNegate
+          ? await sql`
+              SELECT intent_tier, COUNT(*)::int as count
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(COALESCE(state,'')) != ${stateFilter}
+              GROUP BY intent_tier
+            `
+          : await sql`
+              SELECT intent_tier, COUNT(*)::int as count
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(state) = ${stateFilter}
+              GROUP BY intent_tier
+            `)
       : await sql`
           SELECT intent_tier, COUNT(*)::int as count
           FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
@@ -110,14 +118,23 @@ export default async function DashboardPage({ params, searchParams }) {
 
     // Interests
     const interestRows = filterByState
-      ? await sql`
-          SELECT interest, COUNT(*)::int as count FROM (
-            SELECT jsonb_array_elements_text(interests) as interest
-            FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
-              AND UPPER(state) = ${stateFilter}
-              AND interests IS NOT NULL AND interests != '[]'::jsonb
-          ) sub GROUP BY interest ORDER BY count DESC
-        `
+      ? (stateNegate
+          ? await sql`
+              SELECT interest, COUNT(*)::int as count FROM (
+                SELECT jsonb_array_elements_text(interests) as interest
+                FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                  AND UPPER(COALESCE(state,'')) != ${stateFilter}
+                  AND interests IS NOT NULL AND interests != '[]'::jsonb
+              ) sub GROUP BY interest ORDER BY count DESC
+            `
+          : await sql`
+              SELECT interest, COUNT(*)::int as count FROM (
+                SELECT jsonb_array_elements_text(interests) as interest
+                FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                  AND UPPER(state) = ${stateFilter}
+                  AND interests IS NOT NULL AND interests != '[]'::jsonb
+              ) sub GROUP BY interest ORDER BY count DESC
+            `)
       : await sql`
           SELECT interest, COUNT(*)::int as count FROM (
             SELECT jsonb_array_elements_text(interests) as interest
@@ -128,12 +145,19 @@ export default async function DashboardPage({ params, searchParams }) {
 
     // Sources
     const sourceRows = filterByState
-      ? await sql`
-          SELECT COALESCE(referrer_source, 'Direct') as source, COUNT(*)::int as count
-          FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
-            AND UPPER(state) = ${stateFilter}
-          GROUP BY referrer_source ORDER BY count DESC
-        `
+      ? (stateNegate
+          ? await sql`
+              SELECT COALESCE(referrer_source, 'Direct') as source, COUNT(*)::int as count
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(COALESCE(state,'')) != ${stateFilter}
+              GROUP BY referrer_source ORDER BY count DESC
+            `
+          : await sql`
+              SELECT COALESCE(referrer_source, 'Direct') as source, COUNT(*)::int as count
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(state) = ${stateFilter}
+              GROUP BY referrer_source ORDER BY count DESC
+            `)
       : await sql`
           SELECT COALESCE(referrer_source, 'Direct') as source, COUNT(*)::int as count
           FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
@@ -142,22 +166,39 @@ export default async function DashboardPage({ params, searchParams }) {
 
     // Top visitors — all tiers so filters work across full dataset
     const topVisitors = filterByState
-      ? await sql`
-          SELECT id, COALESCE(first_name, '') as first_name,
-            COALESCE(last_name, '') as last_name,
-            COALESCE(LEFT(last_name, 1), '') as last_initial,
-            COALESCE(email, '') as email,
-            COALESCE(city, '') as city, COALESCE(state, '') as state,
-            intent_score, intent_tier, interests, referrer_source,
-            visit_count, last_visit::text as last_visit,
-            COALESCE(age_range, '') as age_range,
-            COALESCE(company_name, '') as company,
-            COALESCE(confidence, '') as confidence,
-            COALESCE(confidence_score, 0) as confidence_score
-          FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
-            AND UPPER(state) = ${stateFilter}
-          ORDER BY intent_score DESC, last_visit DESC
-        `
+      ? (stateNegate
+          ? await sql`
+              SELECT id, COALESCE(first_name, '') as first_name,
+                COALESCE(last_name, '') as last_name,
+                COALESCE(LEFT(last_name, 1), '') as last_initial,
+                COALESCE(email, '') as email,
+                COALESCE(city, '') as city, COALESCE(state, '') as state,
+                intent_score, intent_tier, interests, referrer_source,
+                visit_count, last_visit::text as last_visit,
+                COALESCE(age_range, '') as age_range,
+                COALESCE(company_name, '') as company,
+                COALESCE(confidence, '') as confidence,
+                COALESCE(confidence_score, 0) as confidence_score
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(COALESCE(state,'')) != ${stateFilter}
+              ORDER BY intent_score DESC, last_visit DESC
+            `
+          : await sql`
+              SELECT id, COALESCE(first_name, '') as first_name,
+                COALESCE(last_name, '') as last_name,
+                COALESCE(LEFT(last_name, 1), '') as last_initial,
+                COALESCE(email, '') as email,
+                COALESCE(city, '') as city, COALESCE(state, '') as state,
+                intent_score, intent_tier, interests, referrer_source,
+                visit_count, last_visit::text as last_visit,
+                COALESCE(age_range, '') as age_range,
+                COALESCE(company_name, '') as company,
+                COALESCE(confidence, '') as confidence,
+                COALESCE(confidence_score, 0) as confidence_score
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(state) = ${stateFilter}
+              ORDER BY intent_score DESC, last_visit DESC
+            `)
       : await sql`
           SELECT id, COALESCE(first_name, '') as first_name,
             COALESCE(last_name, '') as last_name,
@@ -176,11 +217,17 @@ export default async function DashboardPage({ params, searchParams }) {
 
     // Date range (within the filtered window)
     const [dateRange] = filterByState
-      ? await sql`
-          SELECT MIN(first_visit)::text as earliest, MAX(last_visit)::text as latest
-          FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
-            AND UPPER(state) = ${stateFilter}
-        `
+      ? (stateNegate
+          ? await sql`
+              SELECT MIN(first_visit)::text as earliest, MAX(last_visit)::text as latest
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(COALESCE(state,'')) != ${stateFilter}
+            `
+          : await sql`
+              SELECT MIN(first_visit)::text as earliest, MAX(last_visit)::text as latest
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(state) = ${stateFilter}
+            `)
       : await sql`
           SELECT MIN(first_visit)::text as earliest, MAX(last_visit)::text as latest
           FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
@@ -225,6 +272,7 @@ export default async function DashboardPage({ params, searchParams }) {
       clientGeo,
       dateWindow: showAll ? 'all' : days,
       activeState: filterByState ? stateFilter : null,
+      activeStateNegate: filterByState ? stateNegate : false,
       isAuthenticated,
       authRole,
     };
