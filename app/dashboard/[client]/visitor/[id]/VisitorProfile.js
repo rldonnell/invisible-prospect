@@ -121,6 +121,30 @@ export default function VisitorProfile({ visitor, clientKey, ghlLocationId }) {
           <div style={s.scoreNumber}>Intent: {v.intent_score} | Confidence: {v.confidence_score || '-'}</div>
           <div style={s.visits}>{v.visit_count} visit{v.visit_count !== 1 ? 's' : ''}</div>
         </div>
+        {v.ghl_contact_id && ghlLocationId && (
+          <div style={{ width: '100%', textAlign: 'center', marginTop: 8 }}>
+            <a
+              href={`https://app.gohighlevel.com/v2/location/${ghlLocationId}/contacts/detail/${v.ghl_contact_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-block',
+                padding: '10px 28px',
+                backgroundColor: '#2563eb',
+                color: '#fff',
+                borderRadius: 6,
+                textDecoration: 'none',
+                fontSize: 14,
+                fontWeight: 600,
+                transition: 'background-color 0.2s',
+              }}
+              onMouseOver={e => e.currentTarget.style.backgroundColor = '#1d4ed8'}
+              onMouseOut={e => e.currentTarget.style.backgroundColor = '#2563eb'}
+            >
+              Open in CRM &rarr;
+            </a>
+          </div>
+        )}
       </div>
 
       {/* Two-column layout */}
@@ -388,29 +412,6 @@ export default function VisitorProfile({ visitor, clientKey, ghlLocationId }) {
               {v.ghl_pushed_at && <Field fieldStyles={fs} label="Pushed At" value={fmtDate(v.ghl_pushed_at)} />}
               {v.ghl_contact_id && <Field fieldStyles={fs} label="GHL Contact ID" value={v.ghl_contact_id} />}
             </div>
-            {v.ghl_contact_id && ghlLocationId && (
-              <a
-                href={`https://app.gohighlevel.com/v2/location/${ghlLocationId}/contacts/detail/${v.ghl_contact_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-block',
-                  marginTop: 12,
-                  padding: '10px 20px',
-                  backgroundColor: '#2563eb',
-                  color: '#fff',
-                  borderRadius: 6,
-                  textDecoration: 'none',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseOver={e => e.currentTarget.style.backgroundColor = '#1d4ed8'}
-                onMouseOut={e => e.currentTarget.style.backgroundColor = '#2563eb'}
-              >
-                Open in CRM &rarr;
-              </a>
-            )}
           </div>
         </div>
       </div>
