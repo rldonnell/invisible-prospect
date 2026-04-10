@@ -124,7 +124,7 @@ export default function VisitorProfile({ visitor, clientKey, ghlLocationId }) {
         {v.ghl_contact_id && ghlLocationId && (
           <div style={{ width: '100%', textAlign: 'center', marginTop: 8 }}>
             <a
-              href={`https://app.gohighlevel.com/v2/location/${ghlLocationId}/contacts/detail/${v.ghl_contact_id}`}
+              href={`https://app.p5mk.com/v2/location/${ghlLocationId}/contacts/detail/${v.ghl_contact_id}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
