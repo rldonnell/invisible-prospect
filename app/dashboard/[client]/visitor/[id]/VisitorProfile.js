@@ -9,7 +9,7 @@ const TIER_COLORS = {
   Low: '#94a3b8',
 };
 
-export default function VisitorProfile({ visitor, clientKey }) {
+export default function VisitorProfile({ visitor, clientKey, ghlLocationId }) {
   const [darkMode, setDarkMode] = useState(
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dark') === '1'
   );
@@ -388,6 +388,29 @@ export default function VisitorProfile({ visitor, clientKey }) {
               {v.ghl_pushed_at && <Field fieldStyles={fs} label="Pushed At" value={fmtDate(v.ghl_pushed_at)} />}
               {v.ghl_contact_id && <Field fieldStyles={fs} label="GHL Contact ID" value={v.ghl_contact_id} />}
             </div>
+            {v.ghl_contact_id && ghlLocationId && (
+              <a
+                href={`https://app.gohighlevel.com/v2/location/${ghlLocationId}/contacts/detail/${v.ghl_contact_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  marginTop: 12,
+                  padding: '10px 20px',
+                  backgroundColor: '#2563eb',
+                  color: '#fff',
+                  borderRadius: 6,
+                  textDecoration: 'none',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  transition: 'background-color 0.2s',
+                }}
+                onMouseOver={e => e.currentTarget.style.backgroundColor = '#1d4ed8'}
+                onMouseOut={e => e.currentTarget.style.backgroundColor = '#2563eb'}
+              >
+                Open in CRM &rarr;
+              </a>
+            )}
           </div>
         </div>
       </div>

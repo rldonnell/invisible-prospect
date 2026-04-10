@@ -56,7 +56,11 @@ export default async function VisitorDetailPage({ params, searchParams }) {
       );
     }
 
-    return <VisitorProfile visitor={visitor} clientKey={client} />;
+    // Resolve GHL location ID for deep-link to contact record
+    const ghlLocEnv = `GHL_LOCATION_${client.replace(/-/g, '_').toUpperCase()}`;
+    const ghlLocationId = process.env[ghlLocEnv] || process.env.GHL_LOCATION_ID || null;
+
+    return <VisitorProfile visitor={visitor} clientKey={client} ghlLocationId={ghlLocationId} />;
 
   } catch (error) {
     return (
