@@ -27,7 +27,7 @@ import { sendEmail } from '../../../../lib/email';
 const CLIENT_KEY = 'cyr-md';
 
 // Who gets notified when a new lead comes in
-const NOTIFY_EMAILS = (process.env.CYRMD_NOTIFY_EMAILS || 'Lcyr@me.com,rdonnell@p5marketing.com,aalvarado@cyrmd.com').split(',').map(e => e.trim());
+const NOTIFY_EMAILS = (process.env.CYRMD_NOTIFY_EMAILS || 'Lcyr@me.com,rdonnell@p5marketing.com,aalvarado@cyrmd.com,Leann@cyrmd.com,ashley@lecyrconsulting.com').split(',').map(e => e.trim());
 
 export async function POST(request) {
   // ── Auth: Formspree can send a custom header or we use a shared secret ──
