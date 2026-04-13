@@ -56,18 +56,21 @@ export async function POST(request) {
     console.log('[cyr-md] Formspree webhook received:', JSON.stringify(body).slice(0, 500));
 
     // ── Extract form fields ──
-    // Formspree passes form field names as-is. The CYR-MD contact form
-    // has: name, company, email, message
-    const name    = (body.name || body.Name || '').trim();
-    const email    = (body.email || body.Email || body._replyto || '').trim().toLowerCase();
-    const company  = (body.company || body.Company || '').trim();
-    const message  = (body.message || body.Message || body['How Can We Help?'] || '').trim();
-    const phone    = (body.phone || body.Phone || '').trim();
-    const location = (body.location || body.Location || '').trim();  // San Antonio or Houston
+    // Formspree webhook payload nests form data inside a "submission" object:
+    //   { "form": "mjgpddkz", "keys": [...], "submission": { "email": "...", ... } }
+    // We check both top-level and submission-level for resilience.
+    const sub = body.submission || body;
+
+    const name     = (sub.name || sub.Name || '').trim();
+    const email    = (sub.email || sub.Email || sub._replyto || '').trim().toLowerCase();
+    const company  = (sub.company || sub.Company || '').trim();
+    const message  = (sub.message || sub.Message || sub['How Can We Help?'] || '').trim();
+    const phone    = (sub.phone || sub.Phone || '').trim();
+    const location = (sub.location || sub.Location || '').trim();  // San Antonio or Houston
 
     // Formspree metadata
-    const formId      = body._formId || 'mjgpddkz';
-    const submittedAt = body._submittedAt || new Date().toISOString();
+    const formId      = body.form || body._formId || 'mjgpddkz';
+    const submittedAt = (sub._date || sub._submittedAt || new Date().toISOString());
 
     if (!email) {
       console.warn('[cyr-md] Submission missing email, skipping');
