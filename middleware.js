@@ -53,6 +53,7 @@ export function middleware(request) {
   // (e.g. DNS-friendly "saspine" → data key "sa-spine")
   const SUBDOMAIN_TO_CLIENT = {
     saspine: 'sa-spine',
+    waverly: 'waverly-manor',
   };
   const clientKey = SUBDOMAIN_TO_CLIENT[subdomain] || subdomain;
 

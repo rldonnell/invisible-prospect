@@ -29,6 +29,12 @@
       "domain": "thebrilliancerevolution.com",
       "vertical": "coaching",
       "taxonomy_file": "taxonomy_tbr.json"
+    },
+    "waverly-manor": {
+      "name": "Waverly Manor",
+      "domain": "waverlymanor.com",
+      "vertical": "wedding-venue",
+      "taxonomy_file": "taxonomy_waverly_manor.json"
     }
   }
 }

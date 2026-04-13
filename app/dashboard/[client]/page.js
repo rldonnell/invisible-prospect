@@ -26,6 +26,7 @@ export async function generateMetadata({ params }) {
 // Friendly display names (used in both login and dashboard)
 const CLIENT_NAMES = {
   'demo': 'Demo Practice (Anonymized)',
+  'waverly-manor': 'Waverly Manor',
 };
 
 function getClientName(client) {
@@ -252,6 +253,7 @@ export default async function DashboardPage({ params, searchParams }) {
       'sa-spine': { code: 'TX', label: 'Texas' },
       'az-breasts': { code: 'AZ', label: 'Arizona' },
       'demo': { code: 'TX', label: 'Texas' },
+      'waverly-manor': { code: 'TX', label: 'Texas' },
     };
     const clientGeo = CLIENT_GEO[client] || null;
 
