@@ -1,4 +1,5 @@
 import { getDb } from '../../../../lib/db';
+import { checkBlocklist } from '../../../../lib/blocklist';
 
 /**
  * POST /api/webhook/pixel
@@ -117,6 +118,19 @@ export async function POST(request) {
       const twitterUrl   = (v.INDIVIDUAL_TWITTER_URL || v.individual_twitter_url || v.twitter_url || '').trim();
       const skills       = (v.SKILLS || v.skills || '').trim();
       const alInterests  = (v.INTERESTS || v.interests_raw || v.al_interests || '').trim();
+
+      // ── Blocklist check: skip bots and known bad actors ──
+      const blockCheck = await checkBlocklist({
+        email,
+        firstName,
+        lastName,
+        phone: primaryPhone,
+      });
+      if (blockCheck.blocked) {
+        console.log(`[${client_key}] Blocked: ${email || firstName + ' ' + lastName} (${blockCheck.matchType}: ${blockCheck.matchValue} — ${blockCheck.reason})`);
+        skipped++;
+        continue;
+      }
 
       // UPSERT: dedup on HEM SHA256, NOT email
       const result = await sql`

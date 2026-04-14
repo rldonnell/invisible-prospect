@@ -1,6 +1,7 @@
 import { getDb } from '../../../../lib/db';
 import { classifyUrl, classifyReferrer } from '../../../../lib/taxonomies';
 import { scoreIntent, extractInterests, generateTags, scoreConfidence, determinePrimaryInterest, determineCampaignBucket, isEmailEligible } from '../../../../lib/scoring';
+import { checkBlocklist } from '../../../../lib/blocklist';
 
 /**
  * GET /api/cron/process-visitors
@@ -61,6 +62,7 @@ export async function GET(request) {
       let processed = 0;
       let errors = 0;
       let emailEligibleCount = 0;
+      let skippedCount = 0;
       const tierCounts = { HOT: 0, High: 0, Medium: 0, Low: 0 };
       const bucketCounts = {
         ready_to_book: 0, provider_research: 0, procedure_treatment: 0,
@@ -69,6 +71,21 @@ export async function GET(request) {
 
       for (const visitor of unprocessed) {
         try {
+          // ── Blocklist check: silently skip bots ──
+          const blockCheck = await checkBlocklist({
+            email: visitor.email,
+            firstName: visitor.first_name,
+            lastName: visitor.last_name,
+            phone: visitor.phone,
+          });
+          if (blockCheck.blocked) {
+            // Delete the blocked visitor entirely
+            await sql`DELETE FROM visitors WHERE id = ${visitor.id}`;
+            console.log(`[${clientKey}] Purged blocked visitor #${visitor.id}: ${visitor.email || visitor.first_name} (${blockCheck.reason})`);
+            skippedCount++;
+            continue;
+          }
+
           // Classify all page views
           const pages = visitor.pages_visited || [];
           const allClassifications = [];
