@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 export default function AdminDashboard() {
   const [authed, setAuthed] = useState(false);
+  const [token, setToken] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [activeTab, setActiveTab] = useState('clients');
@@ -35,24 +36,21 @@ export default function AdminDashboard() {
         setAuthError('Incorrect password.');
         return;
       }
-      // Password is valid — store it
-      sessionStorage.setItem('admin_token', password);
+      // Password is valid — store in state
+      setToken(password);
       setAuthed(true);
     } catch (err) {
       setAuthError('Could not connect to server.');
     }
   }
 
-  function getToken() {
-    return sessionStorage.getItem('admin_token') || '';
-  }
-
   // ── Blocklist ──
   const loadBlocklist = useCallback(async () => {
+    if (!token) return;
     setBlocklistLoading(true);
     try {
       const res = await fetch('/api/admin/blocklist', {
-        headers: { 'Authorization': `Bearer ${getToken()}` }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.status === 401) {
         setAuthed(false);
@@ -66,7 +64,7 @@ export default function AdminDashboard() {
     } finally {
       setBlocklistLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     if (authed && activeTab === 'blocklist') {
@@ -82,7 +80,7 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getToken()}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(newEntry)
       });
@@ -107,7 +105,7 @@ export default function AdminDashboard() {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getToken()}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ id })
       });
@@ -152,7 +150,7 @@ export default function AdminDashboard() {
             <h1 style={styles.headerTitle}>VisitorID Admin</h1>
             <span style={styles.headerSub}>P5 Marketing &middot; Pixel Intelligence Pipeline</span>
           </div>
-          <button onClick={() => { sessionStorage.removeItem('admin_token'); setAuthed(false); }} style={styles.logoutBtn}>
+          <button onClick={() => { setToken(''); setAuthed(false); }} style={styles.logoutBtn}>
             Sign Out
           </button>
         </div>
