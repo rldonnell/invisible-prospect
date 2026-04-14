@@ -23,13 +23,24 @@ export default function AdminDashboard() {
     { key: 'cyr-md', name: 'CYR-MD (Dr. Cyr)', domain: 'cyrmd.com', vertical: 'Spine Surgery', geo: 'TX' },
   ];
 
-  // ── Auth ──
-  function handleLogin(e) {
+  // ── Auth: verify password against the API before granting access ──
+  async function handleLogin(e) {
     e.preventDefault();
-    // Store in sessionStorage (cleared on tab close)
-    sessionStorage.setItem('admin_token', password);
-    setAuthed(true);
     setAuthError('');
+    try {
+      const res = await fetch('/api/admin/blocklist', {
+        headers: { 'Authorization': `Bearer ${password}` }
+      });
+      if (res.status === 401) {
+        setAuthError('Incorrect password.');
+        return;
+      }
+      // Password is valid — store it
+      sessionStorage.setItem('admin_token', password);
+      setAuthed(true);
+    } catch (err) {
+      setAuthError('Could not connect to server.');
+    }
   }
 
   function getToken() {
