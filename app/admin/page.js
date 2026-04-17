@@ -22,6 +22,7 @@ export default function AdminDashboard() {
     { key: 'tbr', name: 'The Brilliance Revolution', domain: 'thebrilliancerevolution.com', vertical: 'Coaching', geo: '' },
     { key: 'four-winds', name: 'Four Winds CMMS', domain: 'fourwindscmms.com', vertical: 'B2B SaaS', geo: '' },
     { key: 'cyr-md', name: 'CYR-MD (Dr. Cyr)', domain: 'cyrmd.com', vertical: 'Spine Surgery', geo: 'TX' },
+    { key: 'p5', name: 'P5 Marketing', domain: 'p5marketing.com', vertical: 'Marketing Agency', geo: 'TX' },
   ];
 
   // ── Auth: verify password against the API before granting access ──

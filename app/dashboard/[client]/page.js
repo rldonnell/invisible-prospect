@@ -27,6 +27,7 @@ export async function generateMetadata({ params }) {
 const CLIENT_NAMES = {
   'demo': 'Demo Practice (Anonymized)',
   'waverly-manor': 'Waverly Manor',
+  'p5': 'P5 Marketing',
 };
 
 function getClientName(client) {
