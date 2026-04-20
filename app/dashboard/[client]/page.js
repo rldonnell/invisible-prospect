@@ -167,6 +167,7 @@ export default async function DashboardPage({ params, searchParams }) {
         `;
 
     // Top visitors — all tiers so filters work across full dataset
+    // `tags` jsonb is pulled so we can show the "Return" badge + filter on it.
     const topVisitors = filterByState
       ? (stateNegate
           ? await sql`
@@ -177,10 +178,12 @@ export default async function DashboardPage({ params, searchParams }) {
                 COALESCE(city, '') as city, COALESCE(state, '') as state,
                 intent_score, intent_tier, interests, referrer_source,
                 visit_count, last_visit::text as last_visit,
+                first_visit::text as first_visit,
                 COALESCE(age_range, '') as age_range,
                 COALESCE(company_name, '') as company,
                 COALESCE(confidence, '') as confidence,
-                COALESCE(confidence_score, 0) as confidence_score
+                COALESCE(confidence_score, 0) as confidence_score,
+                COALESCE(tags, '[]'::jsonb) as tags
               FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
                 AND UPPER(COALESCE(state,'')) != ${stateFilter}
               ORDER BY intent_score DESC, last_visit DESC
@@ -193,10 +196,12 @@ export default async function DashboardPage({ params, searchParams }) {
                 COALESCE(city, '') as city, COALESCE(state, '') as state,
                 intent_score, intent_tier, interests, referrer_source,
                 visit_count, last_visit::text as last_visit,
+                first_visit::text as first_visit,
                 COALESCE(age_range, '') as age_range,
                 COALESCE(company_name, '') as company,
                 COALESCE(confidence, '') as confidence,
-                COALESCE(confidence_score, 0) as confidence_score
+                COALESCE(confidence_score, 0) as confidence_score,
+                COALESCE(tags, '[]'::jsonb) as tags
               FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
                 AND UPPER(state) = ${stateFilter}
               ORDER BY intent_score DESC, last_visit DESC
@@ -209,13 +214,101 @@ export default async function DashboardPage({ params, searchParams }) {
             COALESCE(city, '') as city, COALESCE(state, '') as state,
             intent_score, intent_tier, interests, referrer_source,
             visit_count, last_visit::text as last_visit,
+            first_visit::text as first_visit,
             COALESCE(age_range, '') as age_range,
             COALESCE(company_name, '') as company,
             COALESCE(confidence, '') as confidence,
-            COALESCE(confidence_score, 0) as confidence_score
+            COALESCE(confidence_score, 0) as confidence_score,
+            COALESCE(tags, '[]'::jsonb) as tags
           FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
           ORDER BY intent_score DESC, last_visit DESC
         `;
+
+    // Return-visitor KPI: count of visitors carrying the 'return-visitor' tag
+    // within the current window. The tag is only applied when confidence >= 40
+    // and the visitor meets the multi-date + multi-page criteria, so this is
+    // a clean dedup-safe count without recomputing dates here.
+    const returnVisitorRows = filterByState
+      ? (stateNegate
+          ? await sql`
+              SELECT COUNT(*)::int as count FROM visitors
+              WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(COALESCE(state,'')) != ${stateFilter}
+                AND tags @> '["return-visitor"]'::jsonb
+            `
+          : await sql`
+              SELECT COUNT(*)::int as count FROM visitors
+              WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(state) = ${stateFilter}
+                AND tags @> '["return-visitor"]'::jsonb
+            `)
+      : await sql`
+          SELECT COUNT(*)::int as count FROM visitors
+          WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+            AND tags @> '["return-visitor"]'::jsonb
+        `;
+    const returnVisitors = returnVisitorRows[0]?.count || 0;
+
+    // Daily trend: new vs returning visitors per day in the current window.
+    //   "New" = visitor's first_visit falls on this day
+    //   "Returning" = visitor's last_visit is on this day AND first_visit was earlier
+    // State filters are applied in the same pattern as other queries.
+    const newPerDay = filterByState
+      ? (stateNegate
+          ? await sql`
+              SELECT DATE(first_visit) as day, COUNT(*)::int as count
+              FROM visitors WHERE client_key = ${client} AND first_visit >= CAST(${cutoff} AS date)
+                AND UPPER(COALESCE(state,'')) != ${stateFilter}
+              GROUP BY DATE(first_visit) ORDER BY day
+            `
+          : await sql`
+              SELECT DATE(first_visit) as day, COUNT(*)::int as count
+              FROM visitors WHERE client_key = ${client} AND first_visit >= CAST(${cutoff} AS date)
+                AND UPPER(state) = ${stateFilter}
+              GROUP BY DATE(first_visit) ORDER BY day
+            `)
+      : await sql`
+          SELECT DATE(first_visit) as day, COUNT(*)::int as count
+          FROM visitors WHERE client_key = ${client} AND first_visit >= CAST(${cutoff} AS date)
+          GROUP BY DATE(first_visit) ORDER BY day
+        `;
+
+    const returningPerDay = filterByState
+      ? (stateNegate
+          ? await sql`
+              SELECT DATE(last_visit) as day, COUNT(*)::int as count
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(COALESCE(state,'')) != ${stateFilter}
+                AND DATE(last_visit) > DATE(first_visit)
+              GROUP BY DATE(last_visit) ORDER BY day
+            `
+          : await sql`
+              SELECT DATE(last_visit) as day, COUNT(*)::int as count
+              FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+                AND UPPER(state) = ${stateFilter}
+                AND DATE(last_visit) > DATE(first_visit)
+              GROUP BY DATE(last_visit) ORDER BY day
+            `)
+      : await sql`
+          SELECT DATE(last_visit) as day, COUNT(*)::int as count
+          FROM visitors WHERE client_key = ${client} AND last_visit >= CAST(${cutoff} AS date)
+            AND DATE(last_visit) > DATE(first_visit)
+          GROUP BY DATE(last_visit) ORDER BY day
+        `;
+
+    // Merge new + returning into a single day-indexed series for the chart.
+    const trendMap = new Map();
+    for (const r of newPerDay) {
+      const day = String(r.day).slice(0, 10);
+      trendMap.set(day, { day, new: r.count, returning: 0 });
+    }
+    for (const r of returningPerDay) {
+      const day = String(r.day).slice(0, 10);
+      const existing = trendMap.get(day) || { day, new: 0, returning: 0 };
+      existing.returning = r.count;
+      trendMap.set(day, existing);
+    }
+    const dailyTrend = Array.from(trendMap.values()).sort((a, b) => a.day.localeCompare(b.day));
 
     // Date range (within the filtered window)
     const [dateRange] = filterByState
@@ -264,6 +357,8 @@ export default async function DashboardPage({ params, searchParams }) {
       totalVisitors,
       allTimeTotal,
       tiers,
+      returnVisitors,
+      dailyTrend,
       interests: interestRows,
       sources: sourceRows,
       topVisitors,

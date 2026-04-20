@@ -189,8 +189,85 @@ export async function GET(request) {
           const skills       = (v.SKILLS || '').trim();
           const alInterests  = (v.INTERESTS || '').trim();
 
-          // UPSERT: dedup on client_key + HEM SHA256
+          // ── Secondary-identity dedup (prevent the duplicate pattern where the
+          // same person shows up once with a HEM-based key and once with an
+          // email-based key). Before the INSERT, look for an existing row that
+          // matches by primary email, normalized-first-business-email, or
+          // name+company exactly. If found, UPDATE that row by id instead of
+          // creating a new one.
+          //
+          // The INSERT ON CONFLICT below still handles the (client_key, hem_sha256)
+          // unique constraint for race conditions and exact-key matches.
+          const firstBizEmail = businessEmail.includes(',')
+            ? businessEmail.split(',')[0].trim().toLowerCase()
+            : businessEmail.toLowerCase();
+
+          const existingRow = await sql`
+            SELECT id FROM visitors
+            WHERE client_key = ${clientKey}
+              AND (
+                hem_sha256 = ${dedupKey}
+                OR (${email} != '' AND LOWER(email) = ${email})
+                OR (${firstBizEmail} != '' AND LOWER(business_email) LIKE ${'%' + firstBizEmail + '%'})
+                OR (${firstName} != '' AND ${lastName} != '' AND ${companyName} != ''
+                    AND LOWER(first_name) = ${firstName.toLowerCase()}
+                    AND LOWER(last_name) = ${lastName.toLowerCase()}
+                    AND LOWER(company_name) = ${companyName.toLowerCase()})
+              )
+            ORDER BY visit_count DESC NULLS LAST, id ASC
+            LIMIT 1
+          `;
+
           try {
+            if (existingRow.length > 0) {
+              // UPDATE existing row by id — merge new signal into master
+              const existingId = existingRow[0].id;
+              await sql`
+                UPDATE visitors SET
+                  visit_count = visit_count + 1,
+                  last_visit = GREATEST(last_visit, ${timestamp}::timestamptz),
+                  pages_visited = CASE
+                    WHEN ${fullUrl} != '' AND NOT pages_visited @> ${JSON.stringify([fullUrl])}::jsonb
+                    THEN pages_visited || ${JSON.stringify([fullUrl])}::jsonb
+                    ELSE pages_visited
+                  END,
+                  referrers = CASE
+                    WHEN ${referrer} != '' AND NOT referrers @> ${JSON.stringify([referrer])}::jsonb
+                    THEN referrers || ${JSON.stringify([referrer])}::jsonb
+                    ELSE referrers
+                  END,
+                  email = CASE WHEN email = '' AND ${email} != '' THEN ${email} ELSE email END,
+                  first_name = CASE WHEN first_name = '' AND ${firstName} != '' THEN ${firstName} ELSE first_name END,
+                  last_name = CASE WHEN last_name = '' AND ${lastName} != '' THEN ${lastName} ELSE last_name END,
+                  phone = CASE WHEN phone = '' AND ${primaryPhone} != '' THEN ${primaryPhone} ELSE phone END,
+                  address = CASE WHEN address = '' AND ${address} != '' THEN ${address} ELSE address END,
+                  zip = CASE WHEN zip = '' AND ${zip} != '' THEN ${zip} ELSE zip END,
+                  homeowner = CASE WHEN homeowner = '' AND ${homeowner} != '' THEN ${homeowner} ELSE homeowner END,
+                  married = CASE WHEN married = '' AND ${married} != '' THEN ${married} ELSE married END,
+                  children = CASE WHEN children = '' AND ${children} != '' THEN ${children} ELSE children END,
+                  company_name = CASE WHEN company_name = '' AND ${companyName} != '' THEN ${companyName} ELSE company_name END,
+                  job_title = CASE WHEN job_title = '' AND ${jobTitle} != '' THEN ${jobTitle} ELSE job_title END,
+                  company_industry = CASE WHEN company_industry = '' AND ${companyIndustry} != '' THEN ${companyIndustry} ELSE company_industry END,
+                  company_size = CASE WHEN company_size = '' AND ${companySize} != '' THEN ${companySize} ELSE company_size END,
+                  company_revenue = CASE WHEN company_revenue = '' AND ${companyRevenue} != '' THEN ${companyRevenue} ELSE company_revenue END,
+                  department = CASE WHEN department = '' AND ${department} != '' THEN ${department} ELSE department END,
+                  seniority_level = CASE WHEN seniority_level = '' AND ${seniorityLevel} != '' THEN ${seniorityLevel} ELSE seniority_level END,
+                  all_emails = CASE WHEN all_emails = '' AND ${allEmails} != '' THEN ${allEmails} ELSE all_emails END,
+                  business_email = CASE WHEN business_email = '' AND ${businessEmail} != '' THEN ${businessEmail} ELSE business_email END,
+                  pixel_id = CASE WHEN pixel_id = '' AND ${pixelId} != '' THEN ${pixelId} ELSE pixel_id END,
+                  edid = CASE WHEN edid = '' AND ${edid} != '' THEN ${edid} ELSE edid END,
+                  facebook_url = CASE WHEN facebook_url = '' AND ${facebookUrl} != '' THEN ${facebookUrl} ELSE facebook_url END,
+                  twitter_url = CASE WHEN twitter_url = '' AND ${twitterUrl} != '' THEN ${twitterUrl} ELSE twitter_url END,
+                  skills = CASE WHEN skills = '' AND ${skills} != '' THEN ${skills} ELSE skills END,
+                  al_interests = CASE WHEN al_interests = '' AND ${alInterests} != '' THEN ${alInterests} ELSE al_interests END,
+                  processed = FALSE
+                WHERE id = ${existingId}
+              `;
+              updated++;
+              continue;
+            }
+
+            // No existing row matched — insert fresh with original ON CONFLICT
             const result = await sql`
               INSERT INTO visitors (
                 client_key, hem_sha256, email, first_name, last_name, phone,

@@ -11,6 +11,9 @@ const TIER_COLORS = {
   Low: '#94a3b8',
 };
 
+// Color for the "Return Visitor" pattern (not a tier — a quality badge)
+const RETURN_COLOR = '#6366f1';
+
 const SOURCE_COLORS = [
   '#6366f1', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6',
   '#06b6d4', '#84cc16', '#ef4444', '#a855f7', '#22d3ee',
@@ -28,6 +31,7 @@ export default function DashboardClient({ data }) {
   const tierChartRef = useRef(null);
   const sourceChartRef = useRef(null);
   const interestChartRef = useRef(null);
+  const trendChartRef = useRef(null);
   const [chartReady, setChartReady] = useState(false);
   const [filter, setFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,12 +40,18 @@ export default function DashboardClient({ data }) {
   const pageSize = 20;
 
   const {
-    clientName, totalVisitors, allTimeTotal, tiers, interests,
+    clientName, totalVisitors, allTimeTotal, tiers,
+    returnVisitors = 0,
+    dailyTrend = [],
+    interests,
     sources, topVisitors, dateRange, lastProcessed, lastProcessedCount,
     newestVisit, newestProcessed,
     clientGeo, dateWindow, activeState, activeStateNegate,
     isAuthenticated, authRole,
   } = data;
+
+  // Helper: does a visitor carry the return-visitor tag?
+  const isReturn = (v) => Array.isArray(v.tags) && v.tags.includes('return-visitor');
 
   // Authenticated users see full names; unauthenticated see "First L."
   const showFullNames = !!isAuthenticated;
@@ -130,6 +140,56 @@ export default function DashboardClient({ data }) {
       }));
     }
 
+    // New-vs-Return trend (line chart) — two series per day
+    if (trendChartRef.current && dailyTrend.length > 0) {
+      const ctx = trendChartRef.current.getContext('2d');
+      const labels = dailyTrend.map(d => {
+        try { return new Date(d.day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+        catch { return d.day; }
+      });
+      chartInstances.current.push(new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'New Visitors',
+              data: dailyTrend.map(d => d.new || 0),
+              borderColor: '#14b8a6',
+              backgroundColor: 'rgba(20, 184, 166, 0.15)',
+              borderWidth: 2,
+              tension: 0.3,
+              fill: true,
+              pointRadius: 3,
+            },
+            {
+              label: 'Return Visitors',
+              data: dailyTrend.map(d => d.returning || 0),
+              borderColor: RETURN_COLOR,
+              backgroundColor: 'rgba(99, 102, 241, 0.15)',
+              borderWidth: 2,
+              tension: 0.3,
+              fill: true,
+              pointRadius: 3,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { padding: 14, font: { size: 12 }, color: textColor } },
+            tooltip: { mode: 'index', intersect: false },
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 11 }, color: textColor, maxRotation: 0, autoSkip: true } },
+            y: { grid: { color: gridColor }, ticks: { font: { size: 11 }, color: textColor, precision: 0 }, beginAtZero: true },
+          },
+          interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        },
+      }));
+    }
+
     // Interest horizontal bar
     if (interestChartRef.current && interests.length > 0) {
       const ctx = interestChartRef.current.getContext('2d');
@@ -156,11 +216,16 @@ export default function DashboardClient({ data }) {
         },
       }));
     }
-  }, [chartReady, tiers, sources, interests, darkMode]);
+  }, [chartReady, tiers, sources, interests, dailyTrend, darkMode]);
 
   // Filter visitors (state already filtered server-side, just tier + search here)
+  // Filter values: 'ALL' | 'HOT' | 'High' | 'Medium' | 'Low' | 'RETURN'
   const filtered = topVisitors.filter(v => {
-    if (filter !== 'ALL' && v.intent_tier !== filter) return false;
+    if (filter === 'RETURN') {
+      if (!isReturn(v)) return false;
+    } else if (filter !== 'ALL' && v.intent_tier !== filter) {
+      return false;
+    }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       const fullName = `${v.first_name} ${v.last_name}`.toLowerCase();
@@ -395,6 +460,13 @@ export default function DashboardClient({ data }) {
             <div style={{ ...s.kpiValue, color: TIER_COLORS.HOT }}>{tiers.HOT.toLocaleString()}</div>
             <div style={s.kpiSub}>Immediate Outreach</div>
           </div>
+          <div style={{ ...s.kpiCard, borderTop: `4px solid ${RETURN_COLOR}` }}>
+            <div style={s.kpiLabel}>Return Visitors</div>
+            <div style={{ ...s.kpiValue, color: RETURN_COLOR }}>{returnVisitors.toLocaleString()}</div>
+            <div style={s.kpiSub}>
+              {totalVisitors > 0 ? `${Math.round((returnVisitors / totalVisitors) * 100)}% of total` : 'Visited on 2+ days'}
+            </div>
+          </div>
           <div style={{ ...s.kpiCard, borderTop: `4px solid ${TIER_COLORS.High}` }}>
             <div style={s.kpiLabel}>High Intent</div>
             <div style={{ ...s.kpiValue, color: TIER_COLORS.High }}>{tiers.High.toLocaleString()}</div>
@@ -428,6 +500,16 @@ export default function DashboardClient({ data }) {
           </div>
         </div>
 
+        {/* New vs Return trend — only render when there's data to show */}
+        {dailyTrend.length > 0 && (
+          <div style={s.fullCard}>
+            <h3 style={s.chartTitle}>New vs Return Visitors Over Time</h3>
+            <div style={{ height: 280 }}>
+              <canvas ref={trendChartRef}></canvas>
+            </div>
+          </div>
+        )}
+
         {/* Interests Chart */}
         <div style={s.fullCard}>
           <h3 style={s.chartTitle}>Top Conditions & Procedures Researched</h3>
@@ -458,6 +540,7 @@ export default function DashboardClient({ data }) {
                 <option value="High">High Only</option>
                 <option value="Medium">Medium Only</option>
                 <option value="Low">Low Only</option>
+                <option value="RETURN">Return Visitors ({returnVisitors})</option>
               </select>
             </div>
           </div>
@@ -518,12 +601,41 @@ export default function DashboardClient({ data }) {
                     <td style={s.td}>{[v.city, v.state].filter(Boolean).join(', ') || '-'}</td>
                     <td style={{ ...s.td, fontWeight: 600 }}>{v.intent_score}</td>
                     <td style={s.td}>
-                      <span style={{
-                        ...s.tierBadge,
-                        backgroundColor: TIER_COLORS[v.intent_tier] || '#94a3b8',
-                      }}>
-                        {v.intent_tier}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+                        <span style={{
+                          ...s.tierBadge,
+                          backgroundColor: TIER_COLORS[v.intent_tier] || '#94a3b8',
+                        }}>
+                          {v.intent_tier}
+                        </span>
+                        {/* Return-visitor badge: short "Return" chip in accent color */}
+                        {isReturn(v) && (
+                          <span style={{
+                            ...s.tierBadge,
+                            backgroundColor: RETURN_COLOR,
+                            fontSize: 9,
+                            padding: '2px 8px',
+                          }}>
+                            Return
+                          </span>
+                        )}
+                        {/* HOT reason label — tiny sub-text telling why this row is HOT */}
+                        {v.intent_tier === 'HOT' && (
+                          <span style={{
+                            fontSize: 10,
+                            color: darkMode ? '#94a3b8' : '#64748b',
+                            fontWeight: 500,
+                            fontStyle: 'italic',
+                            marginTop: 1,
+                          }}>
+                            {isReturn(v)
+                              ? 'return visitor'
+                              : (v.interests && v.interests.length > 0
+                                  ? 'high intent'
+                                  : 'high frequency')}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={s.td}>
                       {v.confidence ? (
