@@ -54,6 +54,7 @@ export function middleware(request) {
   const SUBDOMAIN_TO_CLIENT = {
     saspine: 'sa-spine',
     waverly: 'waverly-manor',
+    four: 'four-winds',
   };
   const clientKey = SUBDOMAIN_TO_CLIENT[subdomain] || subdomain;
 
