@@ -1,6 +1,6 @@
 import { getDb } from '../../../../lib/db';
 import { classifyUrl, classifyReferrer } from '../../../../lib/taxonomies';
-import { scoreIntent, extractInterests, generateTags, scoreConfidence, determinePrimaryInterest, determineCampaignBucket, isEmailEligible } from '../../../../lib/scoring';
+import { scoreIntent, extractInterests, generateTags, scoreConfidence, determinePrimaryInterest, determineCampaignBucket, isEmailEligible, detectReturnVisitor } from '../../../../lib/scoring';
 import { checkBlocklist } from '../../../../lib/blocklist';
 
 /**
@@ -100,16 +100,33 @@ export async function GET(request) {
           const primarySource = referrerSources[0] || 'Direct';
 
           // Score intent
-          const { score, tier } = scoreIntent(visitor, allClassifications);
+          const { score, tier: baseTier } = scoreIntent(visitor, allClassifications);
 
-          // Extract interests and generate tags
-          const interests = extractInterests(allClassifications);
-          const tags = generateTags(tier, interests, primarySource);
-
-          // Score confidence
+          // Score confidence (needed before tier overrides below)
           const { confidence, confidenceScore, confidenceFlags } = scoreConfidence(
             visitor, allClassifications, clientKey
           );
+
+          // ── Tier promotion: return visitor ──
+          // A visitor with 2+ distinct calendar dates, 2+ unique pathnames,
+          // and confidence >= 40 is our highest-conviction lead and is
+          // force-promoted to HOT. Low-tier visitors are excluded to avoid
+          // promoting very weak signals.
+          // Ad-clicker pattern is no longer explicitly capped here — the
+          // halved frequency bonus inside scoreIntent already pushes most
+          // single-page repeat visitors down to Medium naturally.
+          let tier = baseTier;
+          const isReturnVisitor = detectReturnVisitor(visitor);
+          if (isReturnVisitor && confidenceScore >= 40 && tier !== 'Low') {
+            tier = 'HOT';
+          }
+
+          // Extract interests and generate tags (tier now reflects overrides)
+          const interests = extractInterests(allClassifications);
+          const tags = generateTags(tier, interests, primarySource);
+          if (isReturnVisitor && confidenceScore >= 40) {
+            tags.push('return-visitor');
+          }
 
           // Determine primary interest and campaign bucket
           const primaryInterest = determinePrimaryInterest(allClassifications);
