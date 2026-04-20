@@ -123,12 +123,19 @@ export async function GET(request) {
           const hemSha256 = (v.HEM_SHA256 || '').trim();
 
           // ── Email ──
-          const rawEmail = v.PERSONAL_VERIFIED_EMAILS || v.PERSONAL_EMAILS || '';
+          // Try personal first (consumer pipeline), then fall back to business (B2B pipeline)
+          // so segments that return B2B records without personal identifiers still ingest.
+          const rawEmail =
+            v.PERSONAL_VERIFIED_EMAILS ||
+            v.PERSONAL_EMAILS ||
+            v.BUSINESS_VERIFIED_EMAILS ||
+            v.BUSINESS_EMAIL ||
+            '';
           const email = rawEmail.includes(',')
             ? rawEmail.split(',')[0].trim().toLowerCase()
             : rawEmail.trim().toLowerCase();
 
-          // Must have either HEM hash or email
+          // Must have either HEM hash or email (personal or business)
           if (!hemSha256 && (!email || !email.includes('@'))) {
             skipped++;
             continue;
