@@ -40,12 +40,28 @@ export async function GET(request) {
       COUNT(*) FILTER (WHERE e.status = 'cleaned_up')::int     AS status_cleaned_up,
       COUNT(*) FILTER (WHERE e.status = 'failed')::int         AS status_failed,
       COUNT(*) FILTER (WHERE e.first_engaged_at IS NOT NULL)::int AS engaged,
+      -- Matches the filter in /api/cron/cleanup-instantly (including the
+      -- enrolled_at fallback for enrollments where Instantly never fired an
+      -- email_sent webhook, so last_sent_at stays NULL).
       COUNT(*) FILTER (
         WHERE e.instantly_lead_id IS NOT NULL
           AND e.first_engaged_at IS NULL
           AND COALESCE(e.status, 'sent') = 'sent'
-          AND COALESCE(e.last_step_sent, 0) >= 3
-          AND e.last_sent_at < NOW() - INTERVAL '7 days'
+          AND (
+            (
+              e.last_sent_at IS NOT NULL
+              AND e.last_sent_at < NOW() - INTERVAL '7 days'
+              AND (
+                COALESCE(e.last_step_sent, 0) >= 3
+                OR e.last_sent_at < NOW() - INTERVAL '21 days'
+              )
+            )
+            OR (
+              e.last_sent_at IS NULL
+              AND e.enrolled_at IS NOT NULL
+              AND e.enrolled_at < NOW() - INTERVAL '9 days'
+            )
+          )
       )::int AS cleanup_eligible,
       COUNT(*) FILTER (
         WHERE e.cleaned_up_at IS NOT NULL
