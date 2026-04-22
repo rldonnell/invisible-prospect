@@ -232,11 +232,13 @@ export async function GET(request) {
       let errBody = null;
 
       try {
+        // NOTE: do NOT send Content-Type: application/json on a DELETE with
+        // no body. Instantly's Fastify backend returns 400
+        // FST_ERR_CTP_EMPTY_JSON_BODY if the header is present without a body.
         const res = await fetch(`${INSTANTLY_LEADS_API}/${row.instantly_lead_id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
           },
         });
 
