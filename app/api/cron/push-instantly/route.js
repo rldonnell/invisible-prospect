@@ -20,6 +20,7 @@ import { getDb } from '../../../../lib/db';
  */
 
 const INSTANTLY_API = 'https://api.instantly.ai/api/v2/leads';
+const INSTANTLY_CAMPAIGNS_API = 'https://api.instantly.ai/api/v2/campaigns';
 const BATCH_SIZE = 500; // Instantly allows up to 1000, we use 500 for safety
 
 // Tier hierarchy for threshold comparison
@@ -27,6 +28,47 @@ const TIER_ORDER = { 'Low': 0, 'Medium': 1, 'High': 2, 'HOT': 3 };
 
 function meetsTierThreshold(visitorTier, campaignMinTier) {
   return (TIER_ORDER[visitorTier] || 0) >= (TIER_ORDER[campaignMinTier] || 0);
+}
+
+/**
+ * Activate an Instantly campaign before pushing leads.
+ *
+ * Instantly auto-flips campaigns to "Completed" status once every lead
+ * has finished the sequence. Completed campaigns will accept new leads
+ * via /leads/add but will NOT sequence them - leads land as contacts
+ * and just sit there. Calling /activate is a no-op if the campaign is
+ * already Active, so it's safe to run on every push.
+ *
+ * Non-blocking: failures are logged but do not abort the push. Worst
+ * case the lead lands without sequencing (current behavior), never worse.
+ */
+async function activateInstantlyCampaign(instantlyCampaignId, apiKey) {
+  try {
+    const res = await fetch(
+      `${INSTANTLY_CAMPAIGNS_API}/${instantlyCampaignId}/activate`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    if (!res.ok) {
+      const body = await res.text();
+      console.warn(
+        `[push-instantly] activate failed for ${instantlyCampaignId}: ${res.status} ${body}`
+      );
+      return { ok: false, status: res.status, body: body.slice(0, 200) };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.warn(
+      `[push-instantly] activate threw for ${instantlyCampaignId}:`,
+      err.message
+    );
+    return { ok: false, error: err.message };
+  }
 }
 
 export async function GET(request) {
@@ -123,6 +165,7 @@ export async function GET(request) {
       let skippedNoCampaign = 0;
       let skippedThreshold = 0;
       let failed = 0;
+      const activations = []; // { campaign_id, ok, status?, error? }
 
       // Group eligible visitors by their campaign bucket
       const leadsByInstantlyCampaign = {}; // instantly_campaign_id → [lead payloads]
@@ -203,6 +246,15 @@ export async function GET(request) {
 
       // Push batches to Instantly
       for (const [instantlyCampaignId, leads] of Object.entries(leadsByInstantlyCampaign)) {
+        // Ensure campaign is Active before pushing. Instantly auto-flips
+        // campaigns to "Completed" once all leads finish the sequence;
+        // Completed campaigns accept new leads as contacts but do NOT
+        // sequence them. Activating an already-Active campaign is a no-op.
+        if (!isDryRun && instantlyCampaignId !== 'dry-run') {
+          const activation = await activateInstantlyCampaign(instantlyCampaignId, apiKey);
+          activations.push({ campaign_id: instantlyCampaignId, ...activation });
+        }
+
         // Process in batches
         for (let i = 0; i < leads.length; i += BATCH_SIZE) {
           const batch = leads.slice(i, i + BATCH_SIZE);
@@ -277,6 +329,8 @@ export async function GET(request) {
         skipped_threshold: skippedThreshold,
         failed,
         dry_run: isDryRun,
+        activations,
+        activations_failed: activations.filter((a) => !a.ok).length,
       };
     }
 
