@@ -44,7 +44,8 @@ export async function GET(request) {
         first_name, last_name, email, phone,
         city, state, age_range,
         intent_score, visit_count,
-        last_visit, interests, referrer_source
+        last_visit, interests, referrer_source,
+        tags, engagement_tier, last_engaged_at
       FROM visitors
       WHERE client_key = ${CLIENT_KEY}
         AND intent_tier = 'HOT'

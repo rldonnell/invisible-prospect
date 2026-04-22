@@ -269,6 +269,59 @@ async function applyEngagementToVisitor(sql, visitorId, ev) {
       END
     WHERE id = ${visitorId}
   `;
+
+  // ── Loop-back into intent scoring ──
+  // A visitor who interacts with our email is demonstrating real interest,
+  // so we promote their intent_tier accordingly. Never downgrade.
+  //
+  // Rules:
+  //   email_opened                      -> tag only (too noisy to promote)
+  //   email_clicked                     -> promote to >= High, add tag
+  //   email_replied / interested / booked -> promote to HOT, clear
+  //                                        hot_alerted_at so tomorrow's
+  //                                        HOT digest re-surfaces this
+  //                                        lead with the engagement
+  //                                        context (it's actionable news
+  //                                        even if they were already HOT).
+  const promoteToHot  = isReply
+    || ev.event_type === 'lead_interested'
+    || ev.event_type === 'lead_meeting_booked';
+  const promoteToHigh = isClick && !promoteToHot;
+
+  // The tag label we want to stamp (or null if this event doesn't add one).
+  const engagementTag = isReply                       ? 'email-replied'
+    : ev.event_type === 'lead_interested'             ? 'email-interested'
+    : ev.event_type === 'lead_meeting_booked'         ? 'email-meeting-booked'
+    : isClick                                         ? 'email-clicked'
+    : isOpen                                          ? 'email-opened'
+    : ev.event_type === 'email_bounced'               ? 'email-bounced'
+    : ev.event_type === 'lead_unsubscribed'           ? 'email-unsubscribed'
+    : null;
+
+  await sql`
+    UPDATE visitors
+    SET
+      -- Promote intent_tier (one-way ratchet: never downgrade)
+      intent_tier = CASE
+        WHEN ${promoteToHot} AND intent_tier <> 'HOT' THEN 'HOT'
+        WHEN ${promoteToHigh} AND intent_tier IN ('Low', 'Medium') THEN 'High'
+        ELSE intent_tier
+      END,
+      -- Re-surface in the HOT digest only when we actually promote to HOT
+      -- via a meaningful engagement (reply/interested/booked). This lets
+      -- SA Spine see "this lead replied!" even if they were already HOT.
+      hot_alerted_at = CASE
+        WHEN ${promoteToHot} THEN NULL
+        ELSE hot_alerted_at
+      END,
+      -- Append tag if not already present
+      tags = CASE
+        WHEN ${engagementTag}::text IS NULL THEN tags
+        WHEN tags ? ${engagementTag} THEN tags
+        ELSE COALESCE(tags, '[]'::jsonb) || to_jsonb(${engagementTag}::text)
+      END
+    WHERE id = ${visitorId}
+  `;
 }
 
 async function applyEngagementToEnrollment(sql, enrollmentId, ev) {

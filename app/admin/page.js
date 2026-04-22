@@ -15,6 +15,11 @@ export default function AdminDashboard() {
   const [newEntry, setNewEntry] = useState({ match_type: 'email', match_value: '', reason: '' });
   const [addStatus, setAddStatus] = useState('');
 
+  // Engagement state
+  const [engagement, setEngagement] = useState(null);
+  const [engagementLoading, setEngagementLoading] = useState(false);
+  const [engagementError, setEngagementError] = useState('');
+
   const clients = [
     { key: 'sa-spine', name: 'SA Spine', domain: 'saspine.com', vertical: 'Spine Surgery', geo: 'TX' },
     { key: 'waverly-manor', name: 'Waverly Manor', domain: 'waverlymanor.com', vertical: 'Wedding Venue', geo: 'TX' },
@@ -72,6 +77,40 @@ export default function AdminDashboard() {
       loadBlocklist();
     }
   }, [authed, activeTab, loadBlocklist]);
+
+  // ── Engagement ──
+  const loadEngagement = useCallback(async () => {
+    if (!token) return;
+    setEngagementLoading(true);
+    setEngagementError('');
+    try {
+      const res = await fetch('/api/admin/engagement-stats', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        setAuthed(false);
+        setAuthError('Session expired. Please log in again.');
+        return;
+      }
+      if (!res.ok) {
+        const body = await res.text();
+        setEngagementError(`Error ${res.status}: ${body.slice(0, 200)}`);
+        return;
+      }
+      const data = await res.json();
+      setEngagement(data);
+    } catch (err) {
+      setEngagementError('Network error');
+    } finally {
+      setEngagementLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (authed && activeTab === 'engagement') {
+      loadEngagement();
+    }
+  }, [authed, activeTab, loadEngagement]);
 
   async function handleAddEntry(e) {
     e.preventDefault();
@@ -166,6 +205,12 @@ export default function AdminDashboard() {
           Clients
         </button>
         <button
+          onClick={() => setActiveTab('engagement')}
+          style={activeTab === 'engagement' ? { ...styles.tab, ...styles.tabActive } : styles.tab}
+        >
+          Engagement
+        </button>
+        <button
           onClick={() => setActiveTab('blocklist')}
           style={activeTab === 'blocklist' ? { ...styles.tab, ...styles.tabActive } : styles.tab}
         >
@@ -198,6 +243,125 @@ export default function AdminDashboard() {
                 </a>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ═══ ENGAGEMENT TAB ═══ */}
+        {activeTab === 'engagement' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px' }}>
+              <div>
+                <h2 style={styles.sectionTitle}>Instantly Engagement</h2>
+                <p style={styles.sectionSub}>
+                  Email engagement loop-back from Instantly to VisitorID. Replies and clicks promote visitors to HOT and re-surface them in the next HOT digest.
+                </p>
+              </div>
+              <button onClick={loadEngagement} style={{ ...styles.btnPrimary, width: 'auto', marginTop: 0, padding: '10px 18px' }}>
+                {engagementLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+
+            {engagementError && <p style={styles.error}>{engagementError}</p>}
+
+            {engagement && (
+              <>
+                {/* KPI tiles */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+                  <KpiTile label="Enrolled" value={engagement.totals.enrolled} />
+                  <KpiTile label="Engaged" value={engagement.totals.engaged} sub={engagement.totals.enrolled ? `${Math.round(engagement.totals.engaged / engagement.totals.enrolled * 1000) / 10}%` : null} />
+                  <KpiTile label="Opens" value={engagement.totals.opens} sub={engagement.totals.open_rate != null ? `${engagement.totals.open_rate}%` : null} />
+                  <KpiTile label="Clicks" value={engagement.totals.clicks} sub={engagement.totals.click_rate != null ? `${engagement.totals.click_rate}%` : null} />
+                  <KpiTile label="Replies" value={engagement.totals.replies} sub={engagement.totals.reply_rate != null ? `${engagement.totals.reply_rate}%` : null} />
+                  <KpiTile label="Reclaimed (7d)" value={engagement.totals.reclaimed_7d} />
+                  <KpiTile label="Reclaim eligible" value={engagement.totals.reclaim_eligible} tone={engagement.totals.reclaim_eligible > 500 ? 'warn' : 'default'} />
+                </div>
+
+                {/* Per-client table */}
+                <h3 style={{ ...styles.sectionTitle, fontSize: '16px', margin: '0 0 8px' }}>By client</h3>
+                <table style={{ ...styles.table, marginBottom: '32px' }}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Client</th>
+                      <th style={styles.th}>Enrolled</th>
+                      <th style={styles.th}>Engaged</th>
+                      <th style={styles.th}>Opens</th>
+                      <th style={styles.th}>Clicks</th>
+                      <th style={styles.th}>Replies</th>
+                      <th style={styles.th}>Bounces</th>
+                      <th style={styles.th}>Unsubs</th>
+                      <th style={styles.th}>Reclaim elig.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {engagement.per_client.map(r => (
+                      <tr key={r.client_key} style={styles.tr}>
+                        <td style={{ ...styles.td, fontWeight: 600 }}>{r.client_key}</td>
+                        <td style={styles.td}>{r.enrolled}</td>
+                        <td style={styles.td}>{r.engaged}</td>
+                        <td style={styles.td}>{r.opens}</td>
+                        <td style={styles.td}>{r.clicks}</td>
+                        <td style={styles.td}>{r.replies}</td>
+                        <td style={styles.td}>{r.bounces}</td>
+                        <td style={styles.td}>{r.unsubs}</td>
+                        <td style={{ ...styles.td, color: r.reclaim_eligible > 500 ? '#dc2626' : '#333' }}>{r.reclaim_eligible}</td>
+                      </tr>
+                    ))}
+                    {engagement.per_client.length === 0 && (
+                      <tr><td style={styles.td} colSpan={9}>No campaigns configured yet.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Recent engaged visitors */}
+                <h3 style={{ ...styles.sectionTitle, fontSize: '16px', margin: '0 0 8px' }}>Recently engaged visitors</h3>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Client</th>
+                      <th style={styles.th}>Visitor</th>
+                      <th style={styles.th}>Intent</th>
+                      <th style={styles.th}>Engagement</th>
+                      <th style={styles.th}>O / C / R</th>
+                      <th style={styles.th}>Last event</th>
+                      <th style={styles.th}>When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {engagement.recent_engaged.map(v => (
+                      <tr key={v.visitor_id} style={styles.tr}>
+                        <td style={{ ...styles.td, fontSize: '12px', color: '#666' }}>{v.client_key}</td>
+                        <td style={styles.td}>
+                          <a href={`/dashboard/${v.client_key}/visitor/${v.visitor_id}`} style={{ color: '#2E86AB', textDecoration: 'none' }}>
+                            {[v.first_name, v.last_name].filter(Boolean).join(' ') || v.email || `Visitor #${v.visitor_id}`}
+                          </a>
+                          <div style={{ fontSize: '11px', color: '#888' }}>{v.email}</div>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={tierPillStyle(v.intent_tier)}>{v.intent_tier || '-'}</span>
+                        </td>
+                        <td style={styles.td}>
+                          <span style={engagementPillStyle(v.engagement_tier)}>{v.engagement_tier || 'None'}</span>
+                        </td>
+                        <td style={{ ...styles.td, fontFamily: 'monospace', fontSize: '12px' }}>
+                          {v.open_count || 0} / {v.click_count || 0} / {v.reply_count || 0}
+                        </td>
+                        <td style={{ ...styles.td, fontSize: '12px' }}>{v.last_event_type || '-'}</td>
+                        <td style={{ ...styles.td, fontSize: '12px', color: '#666' }}>
+                          {v.last_engaged_at ? new Date(v.last_engaged_at).toLocaleString() : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                    {engagement.recent_engaged.length === 0 && (
+                      <tr><td style={styles.td} colSpan={7}>No engaged visitors yet. Engagement arrives via Instantly webhook.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+
+                <p style={{ fontSize: '12px', color: '#999', marginTop: '24px' }}>
+                  Fetched {new Date(engagement.fetched_at).toLocaleString()}
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -299,6 +463,48 @@ const typeColors = {
   phone: '#d1fae5',
   ip: '#fee2e2',
 };
+
+// ── Engagement tab helpers ──
+function KpiTile({ label, value, sub, tone }) {
+  const bg = tone === 'warn' ? '#fff7ed' : '#fff';
+  const border = tone === 'warn' ? '#fed7aa' : '#e2e8f0';
+  const valColor = tone === 'warn' ? '#c2410c' : '#1B3A5C';
+  return (
+    <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: '10px', padding: '14px 16px' }}>
+      <div style={{ fontSize: '11px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: '22px', fontWeight: 700, color: valColor, marginTop: '4px' }}>{value ?? 0}</div>
+      {sub && <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{sub}</div>}
+    </div>
+  );
+}
+
+function tierPillStyle(tier) {
+  const colors = {
+    HOT:    { bg: '#fee2e2', fg: '#b91c1c' },
+    High:   { bg: '#fef3c7', fg: '#92400e' },
+    Medium: { bg: '#e0f2fe', fg: '#075985' },
+    Low:    { bg: '#f1f5f9', fg: '#475569' },
+  };
+  const c = colors[tier] || { bg: '#f1f5f9', fg: '#475569' };
+  return {
+    display: 'inline-block', padding: '2px 10px', borderRadius: '99px',
+    fontSize: '11px', fontWeight: 600, background: c.bg, color: c.fg,
+  };
+}
+
+function engagementPillStyle(tier) {
+  const colors = {
+    Hot:     { bg: '#fee2e2', fg: '#b91c1c' },
+    Engaged: { bg: '#fef3c7', fg: '#92400e' },
+    Passive: { bg: '#e0f2fe', fg: '#075985' },
+    None:    { bg: '#f1f5f9', fg: '#94a3b8' },
+  };
+  const c = colors[tier] || colors.None;
+  return {
+    display: 'inline-block', padding: '2px 10px', borderRadius: '99px',
+    fontSize: '11px', fontWeight: 600, background: c.bg, color: c.fg,
+  };
+}
 
 const styles = {
   // Login
