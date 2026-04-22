@@ -52,6 +52,10 @@ async function activateInstantlyCampaign(instantlyCampaignId, apiKey) {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
+        // Instantly rejects empty bodies when Content-Type is application/json
+        // with "Body cannot be empty". Send an empty object to satisfy the
+        // validator - the activate endpoint takes no parameters.
+        body: JSON.stringify({}),
       }
     );
     if (!res.ok) {
@@ -166,6 +170,7 @@ export async function GET(request) {
       let skippedThreshold = 0;
       let failed = 0;
       const activations = []; // { campaign_id, ok, status?, error? }
+      const pushErrors = [];  // { campaign_id, status?, body?, error? } - sampled, capped at 10
 
       // Group eligible visitors by their campaign bucket
       const leadsByInstantlyCampaign = {}; // instantly_campaign_id → [lead payloads]
@@ -294,10 +299,23 @@ export async function GET(request) {
             } else {
               console.error(`[push-instantly] Instantly API error for ${instantlyCampaignId}:`, data);
               failed += batch.length;
+              if (pushErrors.length < 10) {
+                pushErrors.push({
+                  campaign_id: instantlyCampaignId,
+                  status: response.status,
+                  body: JSON.stringify(data).slice(0, 300),
+                });
+              }
             }
           } catch (fetchErr) {
             console.error(`[push-instantly] Fetch error for ${instantlyCampaignId}:`, fetchErr.message);
             failed += batch.length;
+            if (pushErrors.length < 10) {
+              pushErrors.push({
+                campaign_id: instantlyCampaignId,
+                error: fetchErr.message,
+              });
+            }
           }
         }
       }
@@ -331,6 +349,7 @@ export async function GET(request) {
         dry_run: isDryRun,
         activations,
         activations_failed: activations.filter((a) => !a.ok).length,
+        push_errors: pushErrors,
       };
     }
 
