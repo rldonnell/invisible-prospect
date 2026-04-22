@@ -16,6 +16,13 @@ import { getDb } from '../../../../lib/db';
  *     late opens a chance to land before we nuke the lead.
  *   - The enrollment hasn't already been cleaned up (status != 'cleaned_up').
  *
+ * Fallback for pre-webhook enrollments: the Instantly webhook only started
+ * recording `email_sent` events on 2026-04-08, so older enrollments have
+ * `last_sent_at = NULL` and `last_step_sent = 0` despite their sequences
+ * having long since wrapped. For those rows we fall back to `enrolled_at`:
+ * if it's older than HARD_COMPLETE_DAYS and there's no engagement, the
+ * sequence is done and the lead is eligible for reclaim.
+ *
  * For each eligible enrollment we:
  *   1) DELETE /api/v2/leads/{id} on Instantly
  *   2) Mark email_enrollments.status = 'cleaned_up' with cleaned_up_at stamp
@@ -106,42 +113,66 @@ export async function GET(request) {
     const quietCutoff = new Date(now - quietDays * 24 * 60 * 60 * 1000).toISOString();
     const hardCutoff  = new Date(now - hardDays  * 24 * 60 * 60 * 1000).toISOString();
 
+    // Eligibility has two branches because the webhook only started recording
+    // `email_sent` events on 2026-04-08. Pre-webhook enrollments have
+    // `last_sent_at IS NULL` and `last_step_sent = 0` even though their
+    // sequences have long since finished, so we fall back to `enrolled_at`
+    // for those. Instantly's 3-email sequence wraps in ~14 days, so any
+    // enrollment older than hard_days without engagement is safe to reclaim.
     const eligible = clientFilter
       ? await sql`
           SELECT e.id AS enrollment_id, e.instantly_lead_id, e.campaign_id,
-                 e.visitor_id, e.last_step_sent, e.last_sent_at,
+                 e.visitor_id, e.last_step_sent, e.last_sent_at, e.enrolled_at,
                  c.client_key, c.bucket
           FROM email_enrollments e
           JOIN campaigns c ON c.id = e.campaign_id
           WHERE e.instantly_lead_id IS NOT NULL
             AND e.first_engaged_at IS NULL
             AND COALESCE(e.status, 'sent') NOT IN ('cleaned_up', 'failed')
-            AND e.last_sent_at IS NOT NULL
-            AND e.last_sent_at < ${quietCutoff}::timestamptz
             AND (
-              COALESCE(e.last_step_sent, 0) >= ${FINAL_STEP}
-              OR e.last_sent_at < ${hardCutoff}::timestamptz
+              (
+                e.last_sent_at IS NOT NULL
+                AND e.last_sent_at < ${quietCutoff}::timestamptz
+                AND (
+                  COALESCE(e.last_step_sent, 0) >= ${FINAL_STEP}
+                  OR e.last_sent_at < ${hardCutoff}::timestamptz
+                )
+              )
+              OR (
+                e.last_sent_at IS NULL
+                AND e.enrolled_at IS NOT NULL
+                AND e.enrolled_at < ${hardCutoff}::timestamptz
+              )
             )
             AND c.client_key = ${clientFilter}
-          ORDER BY e.last_sent_at ASC
+          ORDER BY COALESCE(e.last_sent_at, e.enrolled_at) ASC
           LIMIT ${limit}
         `
       : await sql`
           SELECT e.id AS enrollment_id, e.instantly_lead_id, e.campaign_id,
-                 e.visitor_id, e.last_step_sent, e.last_sent_at,
+                 e.visitor_id, e.last_step_sent, e.last_sent_at, e.enrolled_at,
                  c.client_key, c.bucket
           FROM email_enrollments e
           JOIN campaigns c ON c.id = e.campaign_id
           WHERE e.instantly_lead_id IS NOT NULL
             AND e.first_engaged_at IS NULL
             AND COALESCE(e.status, 'sent') NOT IN ('cleaned_up', 'failed')
-            AND e.last_sent_at IS NOT NULL
-            AND e.last_sent_at < ${quietCutoff}::timestamptz
             AND (
-              COALESCE(e.last_step_sent, 0) >= ${FINAL_STEP}
-              OR e.last_sent_at < ${hardCutoff}::timestamptz
+              (
+                e.last_sent_at IS NOT NULL
+                AND e.last_sent_at < ${quietCutoff}::timestamptz
+                AND (
+                  COALESCE(e.last_step_sent, 0) >= ${FINAL_STEP}
+                  OR e.last_sent_at < ${hardCutoff}::timestamptz
+                )
+              )
+              OR (
+                e.last_sent_at IS NULL
+                AND e.enrolled_at IS NOT NULL
+                AND e.enrolled_at < ${hardCutoff}::timestamptz
+              )
             )
-          ORDER BY e.last_sent_at ASC
+          ORDER BY COALESCE(e.last_sent_at, e.enrolled_at) ASC
           LIMIT ${limit}
         `;
 
@@ -182,6 +213,8 @@ export async function GET(request) {
           bucket: e.bucket,
           last_step_sent: e.last_step_sent,
           last_sent_at: e.last_sent_at,
+          enrolled_at: e.enrolled_at,
+          matched_branch: e.last_sent_at ? 'last_sent_at' : 'enrolled_at_fallback',
         })),
         params: { quietDays, hardDays, limit, clientFilter },
       });
