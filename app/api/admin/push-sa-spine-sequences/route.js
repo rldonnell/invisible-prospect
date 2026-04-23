@@ -72,8 +72,9 @@ export async function POST(request) {
     const sql = getDb();
 
     // Look up each bucket's Instantly campaign ID from the campaigns table
+    // (schema: no `name` column - bucket is the natural identifier)
     const campaignRows = await sql`
-      SELECT bucket, instantly_campaign_id, name
+      SELECT bucket, instantly_campaign_id
       FROM campaigns
       WHERE client_key = 'sa-spine'
         AND active = true
@@ -104,7 +105,7 @@ export async function POST(request) {
         results.push({
           bucket: bucketKey,
           ok: false,
-          error: `Campaign "${campaign.name}" has no instantly_campaign_id`,
+          error: `Bucket "${bucketKey}" has no instantly_campaign_id`,
         });
         continue;
       }
@@ -115,7 +116,7 @@ export async function POST(request) {
       if (isDryRun) {
         results.push({
           bucket: bucketKey,
-          campaign_name: campaign.name,
+          display_name: bucketDef.name,
           instantly_campaign_id: campaign.instantly_campaign_id,
           dry_run: true,
           step_count: sequences[0].steps.length,
@@ -146,7 +147,7 @@ export async function POST(request) {
         if (!res.ok) {
           results.push({
             bucket: bucketKey,
-            campaign_name: campaign.name,
+            display_name: bucketDef.name,
             instantly_campaign_id: campaign.instantly_campaign_id,
             ok: false,
             status: res.status,
@@ -157,7 +158,7 @@ export async function POST(request) {
 
         results.push({
           bucket: bucketKey,
-          campaign_name: campaign.name,
+          display_name: bucketDef.name,
           instantly_campaign_id: campaign.instantly_campaign_id,
           ok: true,
           status: res.status,
@@ -168,7 +169,7 @@ export async function POST(request) {
       } catch (fetchErr) {
         results.push({
           bucket: bucketKey,
-          campaign_name: campaign.name,
+          display_name: bucketDef.name,
           instantly_campaign_id: campaign.instantly_campaign_id,
           ok: false,
           error: fetchErr.message,
