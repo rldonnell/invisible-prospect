@@ -51,7 +51,11 @@ import { getDb } from '../../../../lib/db';
 const INSTANTLY_LEADS_API = 'https://api.instantly.ai/api/v2/leads';
 const DEFAULT_LIMIT = 2000;
 const DEFAULT_QUIET_DAYS = 7;
-const DEFAULT_HARD_DAYS = 21;
+// Instantly's 3-email sequence wraps in ~7-8 days, so any enrollment older
+// than 9 days without engagement is safe to reclaim. This is the fallback
+// branch's window (since Instantly doesn't fire `email_sent` webhooks,
+// `last_sent_at` stays NULL and we rely on `enrolled_at` for scheduling).
+const DEFAULT_HARD_DAYS = 9;
 const FINAL_STEP = 3; // 3-email sequence
 
 export const dynamic = 'force-dynamic';
@@ -221,12 +225,17 @@ export async function GET(request) {
     }
 
     // ── Live mode: delete from Instantly then mark enrollment ──
+    // We parallelize deletes in chunks of CONCURRENCY to defeat the per-call
+    // latency to Instantly's API (~2s/call serial). With concurrency=8 we
+    // effectively do 8× the throughput and can clear ~1500-2000 leads per
+    // 300s invocation. Drop concurrency if Instantly starts 429'ing us.
+    const CONCURRENCY = 8;
     let totalDeleted = 0;
     let totalErrors = 0;
     let totalAlreadyGone = 0;
     const errorSamples = []; // capped at 10
 
-    for (const row of eligible) {
+    async function processOne(row) {
       let ok = false;
       let alreadyGone = false;
       let errBody = null;
@@ -279,6 +288,12 @@ export async function GET(request) {
           });
         }
       }
+    }
+
+    // Process in chunks so we don't open 2000 concurrent connections at once
+    for (let i = 0; i < eligible.length; i += CONCURRENCY) {
+      const chunk = eligible.slice(i, i + CONCURRENCY);
+      await Promise.all(chunk.map(processOne));
     }
 
     // ── Finalize run ──
