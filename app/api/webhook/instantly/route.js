@@ -271,24 +271,26 @@ async function applyEngagementToVisitor(sql, visitorId, ev) {
   `;
 
   // ── Loop-back into intent scoring ──
-  // A visitor who interacts with our email is demonstrating real interest,
-  // so we promote their intent_tier accordingly. Never downgrade.
+  // An open or click on an Instantly email validates two things at once:
+  // the email address is real, and a human is paying attention. Both
+  // signals now promote to HOT. Page-view signals alone can no longer
+  // reach HOT (see lib/scoring.js) - this is the only path.
   //
-  // Rules:
-  //   email_opened                      -> tag only (too noisy to promote)
-  //   email_clicked                     -> promote to >= High, add tag
-  //   email_replied / interested / booked -> promote to HOT, clear
-  //                                        hot_alerted_at so tomorrow's
-  //                                        HOT digest re-surfaces this
-  //                                        lead with the engagement
-  //                                        context (it's actionable news
-  //                                        even if they were already HOT).
-  const promoteToHot  = isReply
+  // Rules (one-way ratchet, never downgrades):
+  //   email_opened                      -> HOT + email-re-engaged tag
+  //   email_clicked                     -> HOT + email-re-engaged tag
+  //   email_replied / interested / booked -> HOT + email-re-engaged tag
+  //
+  // hot_alerted_at is cleared on every HOT promotion so the next morning's
+  // HOT digest re-surfaces the lead with fresh engagement context. This is
+  // actionable news even if they were already HOT from a prior event.
+  const promoteToHot = isOpen
+    || isClick
+    || isReply
     || ev.event_type === 'lead_interested'
     || ev.event_type === 'lead_meeting_booked';
-  const promoteToHigh = isClick && !promoteToHot;
 
-  // The tag label we want to stamp (or null if this event doesn't add one).
+  // The event-specific tag label (or null if this event doesn't add one).
   const engagementTag = isReply                       ? 'email-replied'
     : ev.event_type === 'lead_interested'             ? 'email-interested'
     : ev.event_type === 'lead_meeting_booked'         ? 'email-meeting-booked'
@@ -298,23 +300,26 @@ async function applyEngagementToVisitor(sql, visitorId, ev) {
     : ev.event_type === 'lead_unsubscribed'           ? 'email-unsubscribed'
     : null;
 
+  // Umbrella tag stamped on every HOT promotion from an engagement event,
+  // so the HOT digest and GHL segmentation can trivially identify
+  // engagement-validated leads vs. ones that reached HOT by other means.
+  const reEngagedTag = promoteToHot ? 'email-re-engaged' : null;
+
   await sql`
     UPDATE visitors
     SET
       -- Promote intent_tier (one-way ratchet: never downgrade)
       intent_tier = CASE
         WHEN ${promoteToHot} AND intent_tier <> 'HOT' THEN 'HOT'
-        WHEN ${promoteToHigh} AND intent_tier IN ('Low', 'Medium') THEN 'High'
         ELSE intent_tier
       END,
-      -- Re-surface in the HOT digest only when we actually promote to HOT
-      -- via a meaningful engagement (reply/interested/booked). This lets
-      -- SA Spine see "this lead replied!" even if they were already HOT.
+      -- Clear alerted stamp on every HOT promotion so tomorrow's digest
+      -- re-surfaces the lead with the latest engagement context.
       hot_alerted_at = CASE
         WHEN ${promoteToHot} THEN NULL
         ELSE hot_alerted_at
       END,
-      -- Append tag if not already present
+      -- Append the event-specific tag if not already present
       tags = CASE
         WHEN ${engagementTag}::text IS NULL THEN tags
         WHEN tags ? ${engagementTag} THEN tags
@@ -322,6 +327,19 @@ async function applyEngagementToVisitor(sql, visitorId, ev) {
       END
     WHERE id = ${visitorId}
   `;
+
+  // Stamp the umbrella 'email-re-engaged' tag on any HOT promotion.
+  // Kept as a separate UPDATE so the CASE above stays readable.
+  if (reEngagedTag) {
+    await sql`
+      UPDATE visitors
+      SET tags = CASE
+        WHEN tags ? ${reEngagedTag} THEN tags
+        ELSE COALESCE(tags, '[]'::jsonb) || to_jsonb(${reEngagedTag}::text)
+      END
+      WHERE id = ${visitorId}
+    `;
+  }
 }
 
 async function applyEngagementToEnrollment(sql, enrollmentId, ev) {

@@ -109,16 +109,16 @@ export async function GET(request) {
 
           // ── Tier promotion: return visitor ──
           // A visitor with 2+ distinct calendar dates, 2+ unique pathnames,
-          // and confidence >= 40 is our highest-conviction lead and is
-          // force-promoted to HOT. Low-tier visitors are excluded to avoid
-          // promoting very weak signals.
-          // Ad-clicker pattern is no longer explicitly capped here — the
-          // halved frequency bonus inside scoreIntent already pushes most
-          // single-page repeat visitors down to Medium naturally.
+          // and confidence >= 40 is a strong signal - promoted to High.
+          // HOT is reserved for leads that have engaged with an Instantly
+          // outreach email (see app/api/webhook/instantly/route.js).
+          // Low-tier visitors are excluded to avoid promoting very weak signals.
           let tier = baseTier;
           const isReturnVisitor = detectReturnVisitor(visitor);
           if (isReturnVisitor && confidenceScore >= 40 && tier !== 'Low') {
-            tier = 'HOT';
+            // Ratchet up to High, but never downgrade if scoring already
+            // produced High.
+            if (tier === 'Medium') tier = 'High';
           }
 
           // Extract interests and generate tags (tier now reflects overrides)
