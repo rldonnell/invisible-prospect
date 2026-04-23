@@ -219,6 +219,11 @@ export async function GET(request) {
           practice_focus: campaignVars.practice_focus || '',
           doctor_name: campaignVars.doctor_name || '',
           booking_link: campaignVars.booking_link || '',
+          // Per-bucket softer CTA link used by v2 sequences
+          // (see deliverables/SA_Spine_Email_Sequences_v2.md).
+          // Set in campaigns.variables by migration-013; falls back
+          // to booking_link so anchor tags never render with a broken href.
+          resource_link: campaignVars.resource_link || campaignVars.booking_link || '',
           testimonial,
           city: v.city || '',
           state: v.state || '',
