@@ -29,6 +29,16 @@ import { getDb } from '../../../../lib/db';
 // Engagement tier hierarchy (higher wins on upgrade, never downgrades)
 const TIER_ORDER = { None: 0, Passive: 1, Engaged: 2, Hot: 3 };
 
+// Click-spam guardrail: clients in this set demote a visitor's intent_tier
+// from HOT back to 'Medium' if they accumulate more than CLICK_SPAM_THRESHOLD
+// email-click events in CLICK_SPAM_WINDOW_DAYS. The click count being
+// suspiciously high in a short window is almost always a security scanner /
+// link-checker (corporate email gateways, Outlook Safe Links, etc.) rather
+// than a real prospect, so we treat them as Medium and stop alerting.
+const CLICK_SPAM_CLIENTS = new Set(['four-winds']);
+const CLICK_SPAM_THRESHOLD = 10;
+const CLICK_SPAM_WINDOW_DAYS = 7;
+
 function tierForEvent(eventType) {
   switch (eventType) {
     case 'email_opened':        return 'Passive';
@@ -172,6 +182,12 @@ export async function POST(request) {
       // ── 2. Update denormalized summaries ──
       if (enrollment?.visitor_id) {
         await applyEngagementToVisitor(sql, enrollment.visitor_id, ev);
+        // After promotion, check the click-spam guardrail. A click event that
+        // tipped a Four Winds visitor over the 10-clicks-in-7-days threshold
+        // gets demoted from HOT back to Medium.
+        if (ev.event_type === 'email_clicked') {
+          await maybeDemoteClickSpam(sql, enrollment.visitor_id);
+        }
       }
       if (enrollment?.enrollment_id) {
         await applyEngagementToEnrollment(sql, enrollment.enrollment_id, ev);
@@ -271,21 +287,23 @@ async function applyEngagementToVisitor(sql, visitorId, ev) {
   `;
 
   // ── Loop-back into intent scoring ──
-  // An open or click on an Instantly email validates two things at once:
-  // the email address is real, and a human is paying attention. Both
-  // signals now promote to HOT. Page-view signals alone can no longer
-  // reach HOT (see lib/scoring.js) - this is the only path.
+  // A CLICK on an Instantly email is our HOT signal. It validates the email
+  // address AND proves deliberate intent (Apple Mail Privacy Protection
+  // pre-fetches images, which inflates opens - a click can't be faked by
+  // an inbox proxy). Replies / interested / meeting_booked are also HOT.
+  // Opens are recorded as tags but do NOT promote the tier.
+  //
+  // Page-view signals alone cannot reach HOT (see lib/scoring.js) - this
+  // is the only path.
   //
   // Rules (one-way ratchet, never downgrades):
-  //   email_opened                      -> HOT + email-re-engaged tag
+  //   email_opened                      -> email-opened tag ONLY (no promotion)
   //   email_clicked                     -> HOT + email-re-engaged tag
   //   email_replied / interested / booked -> HOT + email-re-engaged tag
   //
   // hot_alerted_at is cleared on every HOT promotion so the next morning's
-  // HOT digest re-surfaces the lead with fresh engagement context. This is
-  // actionable news even if they were already HOT from a prior event.
-  const promoteToHot = isOpen
-    || isClick
+  // HOT digest re-surfaces the lead with fresh engagement context.
+  const promoteToHot = isClick
     || isReply
     || ev.event_type === 'lead_interested'
     || ev.event_type === 'lead_meeting_booked';
@@ -340,6 +358,58 @@ async function applyEngagementToVisitor(sql, visitorId, ev) {
       WHERE id = ${visitorId}
     `;
   }
+}
+
+/**
+ * Click-spam guardrail.
+ *
+ * Real prospects might click 1-3 links across a 3-email sequence. If we see
+ * 10+ clicks in 7 days for the same visitor it is overwhelmingly a corporate
+ * link-checker / security scanner pre-fetching every URL in the email, not a
+ * human. Promoting these to HOT pollutes the daily HOT digest, so for clients
+ * in CLICK_SPAM_CLIENTS we demote them back to 'Medium' once they breach the
+ * threshold and stamp a 'click-spam' tag for visibility.
+ *
+ * Idempotent: applies whenever a click pushes the rolling-7-day count past
+ * the threshold. Also re-applies on subsequent clicks so a visitor whose
+ * tier was somehow re-elevated back to HOT will keep getting demoted.
+ */
+async function maybeDemoteClickSpam(sql, visitorId) {
+  const rows = await sql`
+    SELECT v.client_key, v.intent_tier,
+      (
+        SELECT COUNT(*) FROM instantly_engagement ie
+        WHERE ie.visitor_id = v.id
+          AND ie.event_type = 'email_clicked'
+          AND ie.event_at >= NOW() - (${CLICK_SPAM_WINDOW_DAYS}::int * INTERVAL '1 day')
+      ) AS recent_click_count
+    FROM visitors v
+    WHERE v.id = ${visitorId}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return;
+  if (!CLICK_SPAM_CLIENTS.has(row.client_key)) return;
+  if (Number(row.recent_click_count) <= CLICK_SPAM_THRESHOLD) return;
+
+  // Demote HOT → Medium and stamp the click-spam tag. We deliberately do
+  // NOT touch engagement_tier here - that records what Instantly told us
+  // about the lead and stays accurate. intent_tier is the dashboard signal,
+  // and that's the one we want to suppress.
+  await sql`
+    UPDATE visitors
+    SET
+      intent_tier = CASE
+        WHEN intent_tier = 'HOT' THEN 'Medium'
+        ELSE intent_tier
+      END,
+      hot_alerted_at = NULL,
+      tags = CASE
+        WHEN tags ? 'click-spam' THEN tags
+        ELSE COALESCE(tags, '[]'::jsonb) || to_jsonb('click-spam'::text)
+      END
+    WHERE id = ${visitorId}
+  `;
 }
 
 async function applyEngagementToEnrollment(sql, enrollmentId, ev) {

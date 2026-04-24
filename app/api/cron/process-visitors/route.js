@@ -99,8 +99,10 @@ export async function GET(request) {
           const referrerSources = referrerList.map(classifyReferrer);
           const primarySource = referrerSources[0] || 'Direct';
 
-          // Score intent
-          const { score, tier: baseTier } = scoreIntent(visitor, allClassifications);
+          // Score intent (clientKey enables per-client tier caps - e.g. Four
+          // Winds caps page-view scoring at Medium; multi-day return visitors
+          // are still promoted to High by the block below).
+          const { score, tier: baseTier } = scoreIntent(visitor, allClassifications, clientKey);
 
           // Score confidence (needed before tier overrides below)
           const { confidence, confidenceScore, confidenceFlags } = scoreConfidence(
