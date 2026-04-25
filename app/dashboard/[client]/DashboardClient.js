@@ -47,6 +47,9 @@ export default function DashboardClient({ data }) {
     sources, topVisitors, dateRange, lastProcessed, lastProcessedCount,
     newestVisit, newestProcessed,
     clientGeo, dateWindow, activeState, activeStateNegate,
+    // Source filter (warm/cold/all). coldEnabled hides the toggle for
+    // warm-only clients. sourceCounts feeds the badge labels.
+    activeSource = 'all', coldEnabled = false, sourceCounts = { warm: 0, cold: 0 },
     isAuthenticated, authRole,
   } = data;
 
@@ -65,11 +68,14 @@ export default function DashboardClient({ data }) {
     if (activeDays !== '30') params.days = activeDays;
     // Keep current state filter
     if (activeState) params.state = activeState;
+    // Keep current source filter (only when not the default 'all')
+    if (activeSource && activeSource !== 'all') params.source = activeSource;
     // Apply overrides
     Object.assign(params, overrides);
     // Clean up defaults
     if (params.days === '30') delete params.days;
     if (params.state === '') delete params.state;
+    if (params.source === 'all' || params.source === '') delete params.source;
     const qs = new URLSearchParams(params).toString();
     return `${pathname}${qs ? '?' + qs : ''}`;
   };
@@ -77,6 +83,7 @@ export default function DashboardClient({ data }) {
   const windowHref = (val) => buildHref({ days: val === '30' ? undefined : val });
   const stateHref = (stateCode) => buildHref({ state: stateCode });
   const outOfStateHref = (stateCode) => buildHref({ state: `!${stateCode}` });
+  const sourceHref = (val) => buildHref({ source: val });
 
   const chartInstances = useRef([]);
 
@@ -400,6 +407,53 @@ export default function DashboardClient({ data }) {
                   </a>
                 </>
               )}
+              {/* Source toggle: All / Warm / Cold. Auto-hidden for warm-only clients
+                  (driven by coldEnabled, which is true when the client has any
+                  campaigns row with kind='cold'). */}
+              {coldEnabled && (
+                <>
+                  <span style={{ color: darkMode ? '#334155' : '#e2e8f0', fontSize: 16, margin: '0 2px' }}>|</span>
+                  <a
+                    href={sourceHref('all')}
+                    style={{
+                      ...s.dateWindowBtn,
+                      backgroundColor: activeSource === 'all' ? '#6366f1' : (darkMode ? '#1e293b' : '#fff'),
+                      color: activeSource === 'all' ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                      borderColor: activeSource === 'all' ? '#6366f1' : (darkMode ? '#334155' : '#e2e8f0'),
+                      textDecoration: 'none',
+                    }}
+                    title="All visitors (warm + cold)"
+                  >
+                    All
+                  </a>
+                  <a
+                    href={sourceHref('warm')}
+                    style={{
+                      ...s.dateWindowBtn,
+                      backgroundColor: activeSource === 'warm' ? '#1e3a5f' : (darkMode ? '#1e293b' : '#fff'),
+                      color: activeSource === 'warm' ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                      borderColor: activeSource === 'warm' ? '#1e3a5f' : (darkMode ? '#334155' : '#e2e8f0'),
+                      textDecoration: 'none',
+                    }}
+                    title="Warm pipeline only - pixel-identified site visitors"
+                  >
+                    Warm ({sourceCounts.warm.toLocaleString()})
+                  </a>
+                  <a
+                    href={sourceHref('cold')}
+                    style={{
+                      ...s.dateWindowBtn,
+                      backgroundColor: activeSource === 'cold' ? '#9a3412' : (darkMode ? '#1e293b' : '#fff'),
+                      color: activeSource === 'cold' ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                      borderColor: activeSource === 'cold' ? '#9a3412' : (darkMode ? '#334155' : '#e2e8f0'),
+                      textDecoration: 'none',
+                    }}
+                    title="Cold pipeline only - ICP-matched prospects from Audience Lab"
+                  >
+                    Cold ({sourceCounts.cold.toLocaleString()})
+                  </a>
+                </>
+              )}
               <span style={{ color: darkMode ? '#334155' : '#e2e8f0', fontSize: 16, margin: '0 2px' }}>|</span>
               <button
                 onClick={() => setDarkMode(dm => !dm)}
@@ -608,6 +662,19 @@ export default function DashboardClient({ data }) {
                         }}>
                           {v.intent_tier}
                         </span>
+                        {/* Cold-acquired badge: only shown on rows that came in via the
+                            cold pipeline (acquisition_source = 'al_cold'). Warm is the default
+                            and gets no badge so warm-only clients see no visual change. */}
+                        {v.acquisition_source === 'al_cold' && (
+                          <span style={{
+                            ...s.tierBadge,
+                            backgroundColor: '#9a3412',
+                            fontSize: 9,
+                            padding: '2px 8px',
+                          }}>
+                            Cold
+                          </span>
+                        )}
                         {/* Return-visitor badge: short "Return" chip in accent color */}
                         {isReturn(v) && (
                           <span style={{

@@ -58,12 +58,16 @@ export async function GET(request) {
     ORDER BY COUNT(DISTINCT e.id) DESC
   `;
 
-  // ── Per-campaign (bucket × client) breakdown ──
+  // ── Per-campaign (bucket × client × kind) breakdown ──
+  // c.kind ('warm' | 'cold') is included so cold campaigns surface as
+  // distinct rows in the admin Engagement tab. Sort puts warm above cold
+  // within each (client, bucket) pair so eyes scan top-to-bottom by recency.
   const perCampaign = await sql`
     SELECT
       c.id AS campaign_id,
       c.client_key,
       c.bucket,
+      c.kind,
       c.instantly_campaign_id,
       c.active,
       COUNT(DISTINCT e.id)::int AS enrolled,
@@ -74,8 +78,8 @@ export async function GET(request) {
     FROM campaigns c
     LEFT JOIN email_enrollments e   ON e.campaign_id = c.id
     LEFT JOIN instantly_engagement ev ON ev.enrollment_id = e.id
-    GROUP BY c.id, c.client_key, c.bucket, c.instantly_campaign_id, c.active
-    ORDER BY c.client_key, c.bucket
+    GROUP BY c.id, c.client_key, c.bucket, c.kind, c.instantly_campaign_id, c.active
+    ORDER BY c.client_key, c.bucket, c.kind
   `;
 
   // ── Recently engaged visitors (top 50) ──
