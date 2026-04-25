@@ -1,4 +1,6 @@
 import { getDb } from '../../../../lib/db';
+import { parseAlSegments } from '../../../../lib/al-segments';
+import { validateProspect as validateFourWindsCold } from '../../../../lib/icp/four-winds-cold';
 
 /**
  * GET /api/cron/pull-audiencelab
@@ -6,17 +8,33 @@ import { getDb } from '../../../../lib/db';
  * Pulls recent visitor data from Audience Lab's segment API for each client.
  * Runs daily at 5AM UTC (before the 6AM processing cron).
  *
- * For each configured client segment:
+ * For each configured client+kind ingest job:
  *   1. Fetches all pages from the AL segment API
  *   2. Filters to records with EVENT_TIMESTAMP in the last 25 hours
  *      (25h instead of 24h to avoid gaps between cron runs)
- *   3. Upserts into the visitors table using the same logic as the webhook
+ *   3. Routes by kind:
+ *        - 'pixel'   -> existing warm pipeline (upserts visitor as
+ *                       acquisition_source='pixel', processed=false so
+ *                       the daily processor scores it)
+ *        - 'al_cold' -> cold pipeline (ICP-validates first, cross-checks
+ *                       against warm by email/HEM/name, inserts with
+ *                       acquisition_source='al_cold', processed=true,
+ *                       email_eligible per ICP)
  *
  * Env vars required:
  *   AUDIENCELAB_API_KEY  — your AL API key (X-API-KEY header)
- *   AL_SEGMENTS          — JSON mapping client_key → segment_id, e.g.:
- *                          {"waverly-manor":"80c2a238-...","sa-spine":"abc123-..."}
+ *   AL_SEGMENTS          — JSON, two formats supported (see lib/al-segments.js):
+ *     Flat (warm only):
+ *       {"sa-spine":"abc-123","four-winds":"def-456"}
+ *     Nested per-client kinds (warm + cold):
+ *       {"four-winds":{"pixel":"def-456","al_cold":"ghi-789"}}
  */
+
+// Per-client cold ICP validators. Add new clients here as their cold
+// pipelines come online.
+const COLD_ICP_VALIDATORS = {
+  'four-winds': validateFourWindsCold,
+};
 
 const AL_BASE = 'https://api.audiencelab.io';
 const PAGE_SIZE = 200;
@@ -58,14 +76,14 @@ export async function GET(request) {
     return Response.json({ error: 'AUDIENCELAB_API_KEY not configured' }, { status: 400 });
   }
 
-  let segmentMap;
+  let jobs;
   try {
-    segmentMap = JSON.parse(process.env.AL_SEGMENTS || '{}');
-  } catch {
-    return Response.json({ error: 'AL_SEGMENTS is not valid JSON' }, { status: 400 });
+    jobs = parseAlSegments(process.env.AL_SEGMENTS);
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 400 });
   }
 
-  if (Object.keys(segmentMap).length === 0) {
+  if (jobs.length === 0) {
     return Response.json({ error: 'AL_SEGMENTS is empty' }, { status: 400 });
   }
 
@@ -76,16 +94,18 @@ export async function GET(request) {
   const cutoff = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
   const results = {};
 
-  const clientEntries = Object.entries(segmentMap);
-  for (let ci = 0; ci < clientEntries.length; ci++) {
-    const [clientKey, segmentId] = clientEntries[ci];
+  for (let ji = 0; ji < jobs.length; ji++) {
+    const { client_key: clientKey, kind, segment_id: segmentId } = jobs[ji];
+    // Use a kind-suffixed result key so warm + cold for the same client
+    // don't collide.
+    const resultKey = kind === 'pixel' ? clientKey : `${clientKey}:${kind}`;
 
-    // Delay between clients to avoid rate limits (skip first)
-    if (ci > 0) {
+    // Delay between jobs to avoid rate limits (skip first)
+    if (ji > 0) {
       await sleep(DELAY_BETWEEN_CLIENTS_MS);
     }
 
-    console.log(`[${clientKey}] Pulling segment ${segmentId}...`);
+    console.log(`[${resultKey}] Pulling segment ${segmentId} (kind=${kind})...`);
 
     let page = 1;
     let hasMore = true;
@@ -188,6 +208,114 @@ export async function GET(request) {
           const twitterUrl   = (v.INDIVIDUAL_TWITTER_URL || '').trim();
           const skills       = (v.SKILLS || '').trim();
           const alInterests  = (v.INTERESTS || '').trim();
+
+          // ═══════════════════════════════════════════════════════════════
+          // COLD PIPELINE FORK
+          // ═══════════════════════════════════════════════════════════════
+          // For kind='al_cold' jobs: ICP-validate, cross-pipeline dedup
+          // against any existing row for this client (warm OR cold), then
+          // insert with acquisition_source='al_cold', processed=true,
+          // intent_tier='High', and a fixed campaign_bucket. Skip the
+          // warm UPSERT path entirely.
+          //
+          // The push-instantly cron will pick these up via the (client_key,
+          // bucket, kind='cold') campaign row added in migration-016.
+          if (kind === 'al_cold') {
+            const icpValidator = COLD_ICP_VALIDATORS[clientKey];
+            if (!icpValidator) {
+              console.warn(`[${resultKey}] No cold ICP validator registered for ${clientKey} - skipping`);
+              skipped++;
+              continue;
+            }
+
+            const icpResult = icpValidator(v);
+            if (!icpResult.pass) {
+              console.log(`[${resultKey}] ICP fail (${icpResult.reasons.join(',')}) - ${firstName} ${lastName} / ${jobTitle} @ ${companyName}`);
+              skipped++;
+              continue;
+            }
+
+            // Cross-pipeline dedup: if this person already exists for this
+            // client (regardless of acquisition_source), do NOT create a
+            // cold row. Prevents the same prospect from receiving warm
+            // follow-up AND cold founder-transition pitch.
+            const firstBizEmailCold = businessEmail.includes(',')
+              ? businessEmail.split(',')[0].trim().toLowerCase()
+              : businessEmail.toLowerCase();
+
+            const crossExisting = await sql`
+              SELECT id, acquisition_source FROM visitors
+              WHERE client_key = ${clientKey}
+                AND (
+                  hem_sha256 = ${dedupKey}
+                  OR (${email} != '' AND LOWER(email) = ${email})
+                  OR (${firstBizEmailCold} != '' AND LOWER(business_email) LIKE ${'%' + firstBizEmailCold + '%'})
+                  OR (${firstName} != '' AND ${lastName} != '' AND ${companyName} != ''
+                      AND LOWER(first_name) = ${firstName.toLowerCase()}
+                      AND LOWER(last_name) = ${lastName.toLowerCase()}
+                      AND LOWER(company_name) = ${companyName.toLowerCase()})
+                )
+              LIMIT 1
+            `;
+
+            if (crossExisting.length > 0) {
+              console.log(`[${resultKey}] Cross-pipeline dup (${crossExisting[0].acquisition_source}) - skipping ${firstName} ${lastName}`);
+              skipped++;
+              continue;
+            }
+
+            // Cold prospects bypass scoring. Set tier/score/bucket/tags
+            // manually and mark processed=true so the daily processor
+            // doesn't touch them.
+            const coldTags = ['al-cold', 'icp-pass'];
+            const coldFlags = ['cold_outreach', ...icpResult.reasons.map(r => `icp:${r}`)];
+
+            try {
+              await sql`
+                INSERT INTO visitors (
+                  client_key, hem_sha256, email, first_name, last_name, phone,
+                  city, state, age_range, gender, income, net_worth, linkedin,
+                  address, zip, homeowner, married, children,
+                  company_name, job_title, company_industry, company_size, company_revenue,
+                  department, seniority_level,
+                  all_emails, business_email, pixel_id, edid,
+                  facebook_url, twitter_url, skills, al_interests,
+                  visit_count, first_visit, last_visit,
+                  pages_visited, referrers,
+                  acquisition_source,
+                  processed, processed_at,
+                  intent_score, intent_tier, confidence, confidence_score, confidence_flags,
+                  primary_interest, campaign_bucket, email_eligible,
+                  tags
+                ) VALUES (
+                  ${clientKey}, ${dedupKey}, ${email}, ${firstName}, ${lastName}, ${primaryPhone},
+                  ${city}, ${state}, ${ageRange}, ${gender}, ${income}, ${netWorth}, ${linkedin},
+                  ${address}, ${zip}, ${homeowner}, ${married}, ${children},
+                  ${companyName}, ${jobTitle}, ${companyIndustry}, ${companySize}, ${companyRevenue},
+                  ${department}, ${seniorityLevel},
+                  ${allEmails}, ${businessEmail}, ${pixelId}, ${edid},
+                  ${facebookUrl}, ${twitterUrl}, ${skills}, ${alInterests},
+                  1, ${timestamp}::timestamptz, ${timestamp}::timestamptz,
+                  '[]'::jsonb, '[]'::jsonb,
+                  'al_cold',
+                  TRUE, NOW(),
+                  50, 'High', 'medium', 60, ${JSON.stringify(coldFlags)}::jsonb,
+                  'cold_outreach', 'general_interest', ${icpResult.emailEligible},
+                  ${JSON.stringify(coldTags)}::jsonb
+                )
+                ON CONFLICT (client_key, hem_sha256) DO NOTHING
+              `;
+              inserted++;
+            } catch (dbErr) {
+              console.error(`[${resultKey}] Cold INSERT error for ${dedupKey}:`, dbErr.message);
+              skipped++;
+            }
+            continue;
+          }
+
+          // ═══════════════════════════════════════════════════════════════
+          // WARM (pixel) pipeline continues below
+          // ═══════════════════════════════════════════════════════════════
 
           // ── Secondary-identity dedup (prevent the duplicate pattern where the
           // same person shows up once with a HEM-based key and once with an
@@ -343,7 +471,7 @@ export async function GET(request) {
               updated++;
             }
           } catch (dbErr) {
-            console.error(`[${clientKey}] DB error for ${dedupKey}:`, dbErr.message);
+            console.error(`[${resultKey}] DB error for ${dedupKey}:`, dbErr.message);
             skipped++;
           }
         }
@@ -353,17 +481,17 @@ export async function GET(request) {
 
         // Safety: stop if 95%+ of records are outside the window after many pages
         if (filtered > fetched * 0.95 && fetched > PAGE_SIZE * 10) {
-          console.log(`[${clientKey}] Stopping early — most records older than cutoff (${filtered}/${fetched} filtered)`);
+          console.log(`[${resultKey}] Stopping early - most records older than cutoff (${filtered}/${fetched} filtered)`);
           break;
         }
       }
 
-      results[clientKey] = { fetched, inserted, updated, skipped, filtered };
-      console.log(`[${clientKey}] Done: ${fetched} fetched, ${inserted} new, ${updated} updated, ${skipped} skipped, ${filtered} outside window`);
+      results[resultKey] = { kind, fetched, inserted, updated, skipped, filtered };
+      console.log(`[${resultKey}] Done: ${fetched} fetched, ${inserted} new, ${updated} updated, ${skipped} skipped, ${filtered} outside window`);
 
     } catch (err) {
-      console.error(`[${clientKey}] Pull failed:`, err.message);
-      results[clientKey] = { error: err.message };
+      console.error(`[${resultKey}] Pull failed:`, err.message);
+      results[resultKey] = { kind, error: err.message };
     }
   }
 

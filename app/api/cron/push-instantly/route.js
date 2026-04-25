@@ -30,6 +30,21 @@ function meetsTierThreshold(visitorTier, campaignMinTier) {
   return (TIER_ORDER[visitorTier] || 0) >= (TIER_ORDER[campaignMinTier] || 0);
 }
 
+// Map a visitor's acquisition_source to the matching campaign kind.
+// 'pixel' -> warm follow-up; 'al_cold' -> cold founder-transition outreach.
+// A given (client, bucket, kind) tuple is unique per migration-015,
+// so we route each visitor to exactly one campaign.
+function kindForAcquisition(acquisitionSource) {
+  if (acquisitionSource === 'al_cold') return 'cold';
+  // Default: anything we don't recognize is treated as warm so an
+  // unknown / NULL value can't accidentally route into a cold campaign.
+  return 'warm';
+}
+
+function bucketKindKey(bucket, kind) {
+  return `${bucket}|${kind}`;
+}
+
 /**
  * Activate an Instantly campaign before pushing leads.
  *
@@ -142,17 +157,21 @@ export async function GET(request) {
     `;
 
     for (const [clientKey, campaigns] of Object.entries(campaignsByClient)) {
-      // Build a map: bucket → campaign config
+      // Build a map: ${bucket}|${kind} -> campaign config. A client can
+      // have BOTH a warm and a cold campaign for the same bucket
+      // (e.g. four-winds general_interest + warm AND general_interest + cold)
+      // so we must key by both dimensions.
       const bucketMap = {};
       for (const c of campaigns) {
-        bucketMap[c.bucket] = c;
+        bucketMap[bucketKindKey(c.bucket, c.kind || 'warm')] = c;
       }
 
       // Find eligible visitors not yet enrolled in any campaign for this client
       const eligible = await sql`
         SELECT v.id, v.first_name, v.last_name, v.email, v.city, v.state,
                v.intent_tier, v.confidence, v.confidence_score,
-               v.primary_interest, v.campaign_bucket, v.visit_count
+               v.primary_interest, v.campaign_bucket, v.visit_count,
+               v.acquisition_source
         FROM visitors v
         WHERE v.client_key = ${clientKey}
           AND v.email_eligible = true
@@ -177,9 +196,10 @@ export async function GET(request) {
       const enrollmentRecords = [];        // records to insert after successful push
 
       for (const v of eligible) {
-        const campaign = bucketMap[v.campaign_bucket];
+        const visitorKind = kindForAcquisition(v.acquisition_source);
+        const campaign = bucketMap[bucketKindKey(v.campaign_bucket, visitorKind)];
 
-        // No active campaign for this bucket
+        // No active campaign for this bucket+kind
         if (!campaign) {
           skippedNoCampaign++;
           continue;
