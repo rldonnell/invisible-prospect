@@ -1,6 +1,7 @@
 import { getDb } from '../../../../lib/db';
 import { parseAlSegments } from '../../../../lib/al-segments';
 import { validateProspect as validateFourWindsCold } from '../../../../lib/icp/four-winds-cold';
+import { validateProspect as validateTbrCold } from '../../../../lib/icp/tbr-cold';
 
 /**
  * GET /api/cron/pull-audiencelab
@@ -34,6 +35,7 @@ import { validateProspect as validateFourWindsCold } from '../../../../lib/icp/f
 // pipelines come online.
 const COLD_ICP_VALIDATORS = {
   'four-winds': validateFourWindsCold,
+  'tbr': validateTbrCold,
 };
 
 const AL_BASE = 'https://api.audiencelab.io';
