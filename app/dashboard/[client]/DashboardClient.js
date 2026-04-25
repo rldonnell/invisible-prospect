@@ -435,9 +435,9 @@ export default function DashboardClient({ data }) {
                       borderColor: activeSource === 'warm' ? '#1e3a5f' : (darkMode ? '#334155' : '#e2e8f0'),
                       textDecoration: 'none',
                     }}
-                    title="Warm pipeline only - pixel-identified site visitors"
+                    title="Pixel-identified site visitors only"
                   >
-                    Warm ({sourceCounts.warm.toLocaleString()})
+                    Pixel Leads ({sourceCounts.warm.toLocaleString()})
                   </a>
                   <a
                     href={sourceHref('cold')}
@@ -448,9 +448,9 @@ export default function DashboardClient({ data }) {
                       borderColor: activeSource === 'cold' ? '#9a3412' : (darkMode ? '#334155' : '#e2e8f0'),
                       textDecoration: 'none',
                     }}
-                    title="Cold pipeline only - ICP-matched prospects from Audience Lab"
+                    title="Cold email recipients from Audience Lab only"
                   >
-                    Cold ({sourceCounts.cold.toLocaleString()})
+                    Cold Emails ({sourceCounts.cold.toLocaleString()})
                   </a>
                 </>
               )}
@@ -672,7 +672,7 @@ export default function DashboardClient({ data }) {
                             fontSize: 9,
                             padding: '2px 8px',
                           }}>
-                            Cold
+                            Cold Email
                           </span>
                         )}
                         {/* Return-visitor badge: short "Return" chip in accent color */}
