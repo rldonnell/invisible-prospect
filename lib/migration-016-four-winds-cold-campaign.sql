@@ -53,7 +53,7 @@ INSERT INTO campaigns (
   'four-winds',
   'general_interest',
   'cold',
-  'REPLACE_WITH_REAL_INSTANTLY_COLD_CAMPAIGN_UUID',
+  '75c09b88-bcd2-4327-9cf0-19c4815a199f',
   0,                                               -- confidence_min: cold leads bypass scoring; ICP gating happens at ingest
   'High',                                          -- min_tier: cold rows are inserted at intent_tier='High' so this passes trivially
   false,                                           -- active=false until copy is finalized AND sequence is pushed
@@ -63,7 +63,7 @@ INSERT INTO campaigns (
     'resource_link',    'https://fourwindscmms.com/cmms-demo/',
     -- CAN-SPAM compliance fields. Verify the postal address with Tom
     -- before flipping active=true.
-    'sender_address',   'Four Winds Software, Inc. - [VERIFY HQ ADDRESS]',
+    'sender_address',   'Four Winds Software, Inc., 13398 Sunshine Path, Rancho Penasquitos, CA 92129, United States',
     'unsubscribe_link', '{{instantly_unsubscribe_url}}'
   )
 )

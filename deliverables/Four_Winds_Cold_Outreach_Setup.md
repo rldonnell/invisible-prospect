@@ -1,13 +1,13 @@
 # Four Winds Cold Outreach - Setup & Hand-off
 
-**Date:** 2026-04-24
-**Status:** Code scaffold complete. Cold pipeline NOT yet live - sequence copy is placeholder, campaign row inactive, cold AL segment ID not yet wired.
+**Date:** 2026-04-25
+**Status:** Code complete and copy approved. Cold pipeline NOT yet live - migration-016 still needs to run in Neon, AL_SEGMENTS env still needs the cold segment, sequence still needs to be pushed to Instantly, and the campaign is intentionally inactive until everything is verified.
 
 ---
 
 ## What this is
 
-A second outreach pipeline for Four Winds CMMS, running alongside the existing warm pixel-driven follow-up. The cold pipeline targets older founders / CEOs / owner-operators sourced from a separate Audience Lab segment, with the pitch centered on transitioning operating brilliance so the business can run without constant founder management.
+A second outreach pipeline for Four Winds CMMS, running alongside the existing warm pixel-driven follow-up. The cold pipeline targets facilities, maintenance, and operations leads at small-to-mid businesses, sourced from the Audience Lab "CMMS to P5 Software" segment (`91f6aa7b-ec8e-4863-8f4c-eb12b560fef7`). The pitch is "40 years in, you still talk to the founders." Tom Hamm and his partner John started Four Winds over 40 years ago and Tom still takes the demo calls himself - the contrast is with the rest of the CMMS market where the founders are long gone and you get a chatbot. Single CTA across all three emails: "Talk to Tom."
 
 The two pipelines share infrastructure (Instantly webhook, blocklist, cleanup cron, admin dashboard) but are fully separated where it matters: separate AL segments, separate Instantly campaigns, separate sending accounts, ICP-validated ingest, and cross-pipeline dedup so the same prospect can never receive both.
 
@@ -17,13 +17,13 @@ The two pipelines share infrastructure (Instantly webhook, blocklist, cleanup cr
 
 | | Warm | Cold |
 |---|---|---|
-| Source | Audience Lab pixel segment | Audience Lab cold segment |
+| Source | Audience Lab pixel segment | AL "CMMS to P5 Software" segment (`91f6aa7b-ec8e-4863-8f4c-eb12b560fef7`) |
 | `acquisition_source` | `pixel` | `al_cold` |
 | Campaign `kind` | `warm` | `cold` |
 | ICP gate | none (pixel implies interest) | hard gate at ingest |
 | Scoring | full processor (process-visitors cron) | bypass; inserted at intent_tier='High', processed=true |
-| Instantly campaign | warm campaign, warm sending accounts | separate cold campaign, separate sending accounts |
-| Sequence file | `lib/sequences/four-winds-v1.js` (live) | `lib/sequences/four-winds-cold-v1.js` (placeholder) |
+| Instantly campaign | warm campaign, warm sending accounts | cold campaign `75c09b88-bcd2-4327-9cf0-19c4815a199f`, separate sending accounts |
+| Sequence file | `lib/sequences/four-winds-v1.js` (live) | `lib/sequences/four-winds-cold-v1.js` (copy approved 2026-04-25) |
 
 ---
 
@@ -34,8 +34,8 @@ The two pipelines share infrastructure (Instantly webhook, blocklist, cleanup cr
 - `lib/migration-015-cold-outreach.sql` - schema: adds `acquisition_source` to visitors, `kind` to campaigns, widens unique constraint to (client_key, bucket, kind)
 - `lib/migration-016-four-winds-cold-campaign.sql` - seeds the Four Winds cold campaign row (active=false until copy is finalized)
 - `lib/al-segments.js` - parser for AL_SEGMENTS env var, supports both legacy flat and new nested-per-client formats
-- `lib/icp/four-winds-cold.js` - validates AL records against the founder/CEO + company-size ICP, returns `{pass, reasons, emailEligible}`
-- `lib/sequences/four-winds-cold-v1.js` - cold email sequence module (3 emails, days 0/4/10) with `[REPLACE: ...]` placeholders for every subject line and body
+- `lib/icp/four-winds-cold.js` - validates AL records against the facilities/maintenance + company-size ICP, returns `{pass, reasons, emailEligible}`
+- `lib/sequences/four-winds-cold-v1.js` - cold email sequence module (3 emails, days 0/4/10), copy approved: "40 years in, you still talk to the founders" / Talk to Tom CTA
 - `app/api/admin/push-four-winds-cold-sequences/route.js` - admin endpoint to PATCH the cold sequence into the cold Instantly campaign; refuses live PATCH while placeholders remain
 
 ### Modified
@@ -57,33 +57,34 @@ The two pipelines share infrastructure (Instantly webhook, blocklist, cleanup cr
 
 2. **Verify the warm pipeline still works.** Existing warm INSERTs do not specify `acquisition_source`, so they pick up the `pixel` default. Existing campaigns rows pick up `kind='warm'`. The push-instantly cron now keys by `${bucket}|${kind}` - so warm leads continue to route to warm campaigns. Run `?dry=true` once and eyeball the result before letting the next scheduled push fire live.
 
-3. **Update AL_SEGMENTS env var to the nested format** (only when you're ready to add the cold segment). Both formats are supported, so this can be deferred.
+3. **Update AL_SEGMENTS env var to the nested format** with the cold segment wired in. Both formats are still supported, but production needs the nested form to pick up cold:
 
    Old:
    ```
    AL_SEGMENTS={"four-winds":"<warm-segment-id>"}
    ```
 
-   New:
+   New (use this):
    ```
-   AL_SEGMENTS={"four-winds":{"pixel":"<warm-segment-id>","al_cold":"<cold-segment-id>"}}
+   AL_SEGMENTS={"four-winds":{"pixel":"<warm-segment-id>","al_cold":"91f6aa7b-ec8e-4863-8f4c-eb12b560fef7"}}
    ```
 
    Set in Vercel for production AND in any local `.env` you use.
 
-4. **Build the AL cold segment.** In Audience Lab, create a new segment that filters for older founders/CEOs at small-to-mid companies (5-1000 employees). Age filter goes HERE, upstream - the email copy never references age. Grab the segment UUID and use it in step 3.
+4. **AL cold segment built (done).** Live segment `91f6aa7b-ec8e-4863-8f4c-eb12b560fef7` ("CMMS to P5 Software") filters for facilities / maintenance / operations titles at small-to-mid companies. The ICP validator in `lib/icp/four-winds-cold.js` is a backstop for the segment - it disqualifies obvious mismatches (junior titles, sub-11 employees, 2000+) without re-doing the segment's targeting work.
 
-5. **Create the cold Instantly campaign.** Separate from the warm one. Use different sending accounts (a deliverability hit on a cold campaign should never bleed into warm). Suggested name: "Four Winds COLD - General Interest - v1". Enable Link Tracking AND the campaign-level unsubscribe footer (CAN-SPAM). Grab the campaign UUID.
+5. **Cold Instantly campaign created (done).** UUID `75c09b88-bcd2-4327-9cf0-19c4815a199f`. Confirm the campaign has Link Tracking ON and the campaign-level unsubscribe footer enabled before going live - both are CAN-SPAM requirements.
 
-6. **Run migration-016 in Neon** with the real cold campaign UUID substituted in:
+6. **Run migration-016 in Neon.** The UUID is already wired in. Before running, edit the `sender_address` line to replace `[VERIFY HQ ADDRESS]` with Four Winds' real postal HQ (CAN-SPAM requires a physical address in every commercial email).
 
    ```
    lib/migration-016-four-winds-cold-campaign.sql
    ```
 
-   Verify the `sender_address` field has Four Winds' real postal HQ (CAN-SPAM requires a physical address in every commercial email).
-
-7. **Replace every `[REPLACE: ...]` marker** in `lib/sequences/four-winds-cold-v1.js`. Three emails, three subjects, three preview lines, three bodies. Tom-voice, founder-direct, transition-pitch. Per Robert: do NOT reference age in copy.
+7. **Sequence copy approved (done).** `lib/sequences/four-winds-cold-v1.js` is fully wired with v1 copy:
+   - Email 1 (Day 0): "40 years in, the founder still takes your call" - opens with Tom + partner John, contrasts with chatbot-era CMMS vendors, single Talk-to-Tom CTA + phone + demo link
+   - Email 2 (Day 4): "Still here, {{first_name}}" - the "I can't believe the founder picked up" customer quote, same CTA stack
+   - Email 3 (Day 10): "Last note, {{first_name}}" - permission-based out, single Talk-to-Tom button
 
 8. **Push the sequence to Instantly** (dry run first, then live):
 
@@ -119,10 +120,12 @@ The check is intentionally one-way: a person who arrives via the pixel AFTER the
 
 ## ICP rules (Four Winds cold)
 
+The AL segment does the heavy targeting work. The validator in `lib/icp/four-winds-cold.js` is a backstop for obvious mismatches.
+
 Hard gates - row is dropped from cold ingest if any fail:
 
-- **Job title** must match `/founder|co-founder|ceo|owner|owner-operator|president|principal|managing partner|managing director|proprietor/i` AND must NOT match disqualifiers (`/intern|student|assistant|coordinator|manager of|of marketing|head of/i`)
-- **Company size** must be in [5, 1000] employees (parsed from AL's `COMPANY_EMPLOYEE_COUNT` which can be `"11-50"`, `"1000+"`, or a single number). Missing size is allowed but flagged.
+- **Job title** must match `/facilit|maintenance|maintenence|operations|engineer|plant|building|property|asset|fleet|technical operations/i` AND must NOT match disqualifiers (`/intern|student|assistant|coordinator|analyst|associate/i`)
+- **Company size** must be in [11, 2000] employees (parsed from AL's `COMPANY_EMPLOYEE_COUNT` which can be `"11 to 50"`, `"1000+"`, or a single number). Sub-11 = no real facilities team. 2000+ = enterprise, almost certainly already on Maximo / SAP PM where Tom's human-first pitch lands flat. Missing size is allowed but flagged.
 - **Email** must exist (personal or business)
 
 Soft signal - row passes ICP but `email_eligible=false`:
