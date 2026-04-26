@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P5 Pixel Intelligence Pipeline — System Map</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e0e0e0; min-height: 100vh; }
+
+  .header { background: linear-gradient(135deg, #1a1d2e 0%, #0f1117 100%); border-bottom: 1px solid #2a2d3e; padding: 28px 40px; }
+  .header h1 { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+  .header p { font-size: 13px; color: #8b8fa3; margin-top: 4px; }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 32px 40px; }
+
+  /* ── Legend ── */
+  .legend { display: flex; gap: 24px; margin-bottom: 28px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #8b8fa3; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* ── Pipeline Row ── */
+  .pipeline { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; padding-bottom: 20px; }
+
+  .stage { flex: 1; min-width: 220px; }
+  .stage-header { padding: 14px 16px; border-radius: 10px 10px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 8px; }
+  .stage-header .icon { font-size: 16px; }
+  .stage-body { background: #1a1d2e; border: 1px solid #2a2d3e; border-top: none; border-radius: 0 0  10px 10px; padding: 16px; }
+
+  .stage-header.ingest { background: linear-gradient(135deg, #1e3a5f, #1a2d4a); color: #60a5fa; }
+  .stage-header.store { background: linear-gradient(135deg, #2d1f4e, #1f1735); color: #a78bfa; }
+  .stage-header.process { background: linear-gradient(135deg, #1a3d2e, #142e22); color: #4ade80; }
+  .stage-header.push { background: linear-gradient(135deg, #4a2d1a, #3a2010); color: #fb923c; }
+  .stage-header.dashboard { background: linear-gradient(135deg, #3d1a3a, #2e1028); color: #f472b6; }
+
+  .arrow-col { display: flex; align-items: center; justify-content: center; padding-top: 40px; min-width: 32px; }
+  .arrow-col svg { width: 28px; height: 28px; color: #3a3d4e; }
+
+  /* ── Component Cards ── */
+  .component { background: #12141f; border: 1px solid #2a2d3e; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; transition: border-color 0.2s; }
+  .component:hover { border-color: #4a4d5e; }
+  .component:last-child { margin-bottom: 0; }
+  .comp-name { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .comp-desc { font-size: 11px; color: #6b7280; line-height: 1.5; }
+  .comp-file { font-size: 10px; color: #4a4d5e; font-family: 'SF Mono', 'Fira Code', monospace; margin-top: 6px; }
+  .comp-schedule { display: inline-block; font-size: 10px; color: #60a5fa; background: rgba(96,165,250,0.1); padding: 2px 8px; border-radius: 4px; margin-top: 6px; }
+
+  /* ── Client Matrix ── */
+  .matrix-section { margin-top: 48px; }
+  .matrix-section h2 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .matrix-section .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 20px; }
+
+  .matrix-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .matrix-table thead th { background: #1a1d2e; padding: 10px 14px; text-align: left; font-weight: 600; color: #8b8fa3; border-bottom: 2px solid #2a2d3e; white-space: nowrap; }
+  .matrix-table tbody td { padding: 10px 14px; border-bottom: 1px solid #1e2030; vertical-align: middle; }
+  .matrix-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .matrix-table .client-name { font-weight: 600; color: #fff; white-space: nowrap; }
+  .matrix-table .domain { font-size: 11px; color: #6b7280; }
+  .matrix-table .vertical-tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+
+  .tag-spine { background: rgba(96,165,250,0.12); color: #60a5fa; }
+  .tag-plastic { background: rgba(244,114,182,0.12); color: #f472b6; }
+  .tag-b2b { background: rgba(74,222,128,0.12); color: #4ade80; }
+  .tag-coaching { background: rgba(251,146,60,0.12); color: #fb923c; }
+  .tag-ecommerce { background: rgba(167,139,250,0.12); color: #a78bfa; }
+  .tag-venue { background: rgba(45,212,191,0.12); color: #2dd4bf; }
+
+  .check { color: #4ade80; font-weight: 700; font-size: 15px; text-align: center; }
+  .partial { color: #fbbf24; font-size: 12px; text-align: center; }
+  .none { color: #3a3d4e; text-align: center; font-size: 13px; }
+  .todo { color: #f87171; font-size: 12px; text-align: center; font-weight: 600; }
+  .live { color: #4ade80; font-size: 12px; text-align: center; }
+  .live-detail { font-size: 10px; color: #6b7280; display: block; margin-top: 2px; }
+
+  /* ── Cron Timeline ── */
+  .cron-section { margin-top: 48px; }
+  .cron-section h2 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .cron-section .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 20px; }
+  .timeline { display: flex; align-items: center; gap: 0; position: relative; }
+  .tl-step { flex: 1; text-align: center; position: relative; }
+  .tl-dot { width: 36px; height: 36px; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+  .tl-dot.blue { background: rgba(96,165,250,0.2); color: #60a5fa; border: 2px solid #60a5fa; }
+  .tl-dot.green { background: rgba(74,222,128,0.2); color: #4ade80; border: 2px solid #4ade80; }
+  .tl-dot.orange { background: rgba(251,146,60,0.2); color: #fb923c; border: 2px solid #fb923c; }
+  .tl-label { font-size: 13px; font-weight: 600; color: #fff; }
+  .tl-desc { font-size: 11px; color: #6b7280; margin-top: 4px; line-height: 1.4; max-width: 200px; margin-left: auto; margin-right: auto; }
+  .tl-time { font-size: 12px; color: #60a5fa; margin-top: 6px; font-family: 'SF Mono', 'Fira Code', monospace; }
+  .tl-connector { flex: 0 0 80px; height: 2px; background: linear-gradient(90deg, #3a3d4e, #4a4d5e); position: relative; top: -30px; }
+  .tl-connector::after { content: '→'; position: absolute; right: -6px; top: -10px; color: #4a4d5e; font-size: 16px; }
+
+  /* ── Taxonomy Section ── */
+  .taxonomy-section { margin-top: 48px; }
+  .taxonomy-section h2 { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .taxonomy-section .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 20px; }
+  .taxonomy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .taxonomy-card { background: #1a1d2e; border: 1px solid #2a2d3e; border-radius: 10px; padding: 18px; }
+  .taxonomy-card h3 { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .taxonomy-card .domain-label { font-size: 11px; color: #6b7280; margin-bottom: 12px; }
+  .cat-list { list-style: none; }
+  .cat-list li { font-size: 12px; color: #8b8fa3; padding: 3px 0; display: flex; justify-content: space-between; }
+  .cat-list li .cat-name { color: #e0e0e0; }
+  .cat-list li .cat-count { color: #4a4d5e; font-family: monospace; }
+
+  .footer { margin-top: 60px; padding: 20px 0; border-top: 1px solid #1e2030; text-align: center; font-size: 11px; color: #3a3d4e; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>P5 Pixel Intelligence Pipeline — System Map</h1>
+  <p>Complete workflow showing how anonymous website visitors are identified, enriched, scored, and pushed to GoHighLevel for each client</p>
+</div>
+
+<div class="container">
+
+  <!-- ════════════════════════════════════════════ -->
+  <!--  PIPELINE FLOW                              -->
+  <!-- ════════════════════════════════════════════ -->
+  <div class="pipeline">
+
+    <!-- STAGE 1: INGESTION -->
+    <div class="stage">
+      <div class="stage-header ingest"><span class="icon">📡</span> 1. Ingestion</div>
+      <div class="stage-body">
+        <div class="component">
+          <div class="comp-name">Audience Lab Pull (Cron)</div>
+          <div class="comp-desc">Fetches visitor data from Audience Lab segment API for each client. Paginates through results, filters by timestamp (7-day lookback), upserts into Postgres.</div>
+          <div class="comp-file">app/api/cron/pull-audiencelab/route.js</div>
+          <div class="comp-schedule">⏰ Daily 5:00 AM UTC</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Pixel Webhook (Real-Time)</div>
+          <div class="comp-desc">Receives real-time POST from pixel platform or batch CSV uploads. Supports both AL native (UPPER_CASE) and normalized field names. Deduplicates on HEM SHA256 hash.</div>
+          <div class="comp-file">app/api/webhook/pixel/route.js</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-col">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </div>
+
+    <!-- STAGE 2: STORAGE -->
+    <div class="stage">
+      <div class="stage-header store"><span class="icon">🗄️</span> 2. Storage</div>
+      <div class="stage-body">
+        <div class="component">
+          <div class="comp-name">Neon Postgres</div>
+          <div class="comp-desc">Cloud Postgres (pooled connection). Core <strong style="color:#a78bfa">visitors</strong> table with 40+ columns: identity, enrichment, behavioral, scoring, and GHL sync fields.</div>
+          <div class="comp-file">lib/schema.sql</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Supporting Tables</div>
+          <div class="comp-desc"><strong style="color:#a78bfa">processing_runs</strong> — logs each cron execution with tier counts.<br><strong style="color:#a78bfa">ingestion_stats</strong> — daily webhook counters per client.</div>
+          <div class="comp-file">lib/schema.sql</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Dedup Strategy</div>
+          <div class="comp-desc">UNIQUE(client_key, hem_sha256). HEM hash is primary identity key — not email. Visitors with multiple emails consolidate to one record.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-col">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </div>
+
+    <!-- STAGE 3: PROCESSING -->
+    <div class="stage">
+      <div class="stage-header process"><span class="icon">⚙️</span> 3. Processing</div>
+      <div class="stage-body">
+        <div class="component">
+          <div class="comp-name">URL Taxonomy Classifier</div>
+          <div class="comp-desc">Maps each visited URL to category + subcategory using per-client rule sets. 7 client taxonomies with 15–80 rules each covering procedures, services, high-intent pages, etc.</div>
+          <div class="comp-file">lib/taxonomies.js</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Intent Scoring</div>
+          <div class="comp-desc">Points-based model: visit frequency, research pages (×25 ea), high-intent pages (×30 ea), provider research (+15), recency bonus. Tiers: HOT (70+), High (25+), Medium (5+), Low.</div>
+          <div class="comp-file">lib/scoring.js → scoreIntent()</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Confidence Scoring</div>
+          <div class="comp-desc">Identity trust model: name↔email match, geography, enrichment depth, fake-name detection, bot patterns, 555-phone check. Tiers: High (70+), Medium (40+), Low.</div>
+          <div class="comp-file">lib/scoring.js → scoreConfidence()</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Process Visitors (Cron)</div>
+          <div class="comp-desc">Orchestrator: fetches unprocessed rows, runs taxonomy + intent + confidence scoring, writes results back. Loops through all ACTIVE_CLIENTS.</div>
+          <div class="comp-file">app/api/cron/process-visitors/route.js</div>
+          <div class="comp-schedule">⏰ Daily 6:00 AM UTC</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-col">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </div>
+
+    <!-- STAGE 4: GHL PUSH -->
+    <div class="stage">
+      <div class="stage-header push"><span class="icon">🚀</span> 4. GHL Push</div>
+      <div class="stage-body">
+        <div class="component">
+          <div class="comp-name">GoHighLevel Sync</div>
+          <div class="comp-desc">Pushes scored visitors (Medium+ intent AND Medium+ confidence) to GHL as contacts. Creates or updates with tags, custom fields (score, tier, interests, demographics).</div>
+          <div class="comp-file">app/api/cron/push-ghl/route.js</div>
+          <div class="comp-schedule">⏰ Daily 7:00 AM UTC</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Per-Client GHL Keys</div>
+          <div class="comp-desc">Each client can have its own GHL sub-account API key (GHL_API_KEY_SA_SPINE, etc.) and Location ID. Falls back to shared agency key if none set.</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Tags & Custom Fields</div>
+          <div class="comp-desc">Tags: "Visitor ID", tier (HOT/High/Medium), confidence, interest-based slugs, referrer source.<br>Custom fields: pixel_score, pixel_tier, pixel_source, pixel_visits, demographics, company info.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-col">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </div>
+
+    <!-- STAGE 5: DASHBOARD -->
+    <div class="stage">
+      <div class="stage-header dashboard"><span class="icon">📊</span> 5. Dashboard</div>
+      <div class="stage-body">
+        <div class="component">
+          <div class="comp-name">Client Dashboard</div>
+          <div class="comp-desc">Next.js dashboard at /dashboard/[client]. Password-protected per client. Shows visitor list, tier breakdown, visitor detail profiles.</div>
+          <div class="comp-file">app/dashboard/[client]/</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Visitor Profiles</div>
+          <div class="comp-desc">Deep-dive view at /dashboard/[client]/visitor/[id]. Shows full enrichment, page history, intent score, confidence, interests, and GHL sync status.</div>
+          <div class="comp-file">app/dashboard/[client]/visitor/[id]/</div>
+        </div>
+        <div class="component">
+          <div class="comp-name">Reports API</div>
+          <div class="comp-desc">JSON endpoint for pulling visitor data programmatically. Used by Cowork skills for generating Excel reports and HTML dashboards.</div>
+          <div class="comp-file">app/api/reports/route.js</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!--  CLIENT × COMPONENT MATRIX                 -->
+  <!-- ════════════════════════════════════════════ -->
+  <div class="matrix-section">
+    <h2>Client × Component Matrix</h2>
+    <p class="subtitle">Which pipeline components are active or configured for each client</p>
+
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>Vertical</th>
+          <th>AL Segment</th>
+          <th>Webhook</th>
+          <th>Taxonomy</th>
+          <th>Intent Score</th>
+          <th>Confidence</th>
+          <th>GHL Push</th>
+          <th>GHL Connected</th>
+          <th>Email Sequence</th>
+          <th>Dashboard</th>
+          <th>Geo-Scoring</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="client-name">SA Spine</div>
+            <div class="domain">saspine.com</div>
+          </td>
+          <td><span class="vertical-tag tag-spine">Spine Surgery</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(79 rules)</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="live">✓ Key configured<span class="live-detail">GHL_API_KEY_SA_SPINE</span></td>
+          <td class="todo">❓ Needs check</td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(TX)</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="client-name">AZ Breasts</div>
+            <div class="domain">azbreasts.com</div>
+          </td>
+          <td><span class="vertical-tag tag-plastic">Plastic Surgery</span></td>
+          <td class="partial">⚠ config needed</td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(15 rules)</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="live">✓ Key configured<span class="live-detail">GHL_API_KEY_AZ_BREASTS</span></td>
+          <td class="todo">❓ Needs check</td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(AZ)</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="client-name">Four Winds CMMS</div>
+            <div class="domain">fourwindscmms.com</div>
+          </td>
+          <td><span class="vertical-tag tag-b2b">B2B SaaS</span></td>
+          <td class="partial">⚠ config needed</td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(19 rules)</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="live">✓ Key configured<span class="live-detail">GHL_API_KEY_FOUR_WINDS</span></td>
+          <td class="todo">❓ Needs check</td>
+          <td class="check">✓</td>
+          <td class="none">— <span style="font-size:10px;color:#3a3d4e">national</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="client-name">The Brilliance Revolution</div>
+            <div class="domain">thebrilliancerevolution.com</div>
+          </td>
+          <td><span class="vertical-tag tag-coaching">Coaching</span></td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">d40c6ea8</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(17 rules)</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="live">✓ Key configured<span class="live-detail">GHL_API_KEY_TBR</span></td>
+          <td class="todo">❓ Needs check</td>
+          <td class="check">✓</td>
+          <td class="none">— <span style="font-size:10px;color:#3a3d4e">national</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="client-name">Waverly Manor</div>
+            <div class="domain">waverlymanor.com</div>
+          </td>
+          <td><span class="vertical-tag tag-venue">Event Venue</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(30 rules)</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="live">✓ Key configured<span class="live-detail">GHL_API_KEY_WAVERLY_MANOR</span></td>
+          <td class="todo">❓ Needs check</td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(TX)</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="client-name">Dough Babies (Cute C Toys)</div>
+            <div class="domain">—</div>
+          </td>
+          <td><span class="vertical-tag tag-ecommerce">E-Commerce</span></td>
+          <td class="none">—</td>
+          <td class="check">✓</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(23 rules)</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="none">— <span style="font-size:10px;color:#3a3d4e">not in ACTIVE_CLIENTS</span></td>
+          <td class="none">—</td>
+          <td class="none">—</td>
+          <td class="none">—</td>
+          <td class="none">— <span style="font-size:10px;color:#3a3d4e">national</span></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="client-name">Plastic Surgery (Generic)</div>
+            <div class="domain">template</div>
+          </td>
+          <td><span class="vertical-tag tag-plastic">Plastic Surgery</span></td>
+          <td class="none">—</td>
+          <td class="none">—</td>
+          <td class="check">✓ <span style="font-size:10px;color:#6b7280">(22 rules)</span></td>
+          <td class="check">✓</td>
+          <td class="check">✓</td>
+          <td class="none">—</td>
+          <td class="none">—</td>
+          <td class="none">—</td>
+          <td class="none">—</td>
+          <td class="none">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!--  CRON TIMELINE                              -->
+  <!-- ════════════════════════════════════════════ -->
+  <div class="cron-section">
+    <h2>Daily Cron Pipeline</h2>
+    <p class="subtitle">Three sequential jobs run each morning on Vercel Cron, spaced 1 hour apart</p>
+
+    <div class="timeline">
+      <div class="tl-step">
+        <div class="tl-dot blue">1</div>
+        <div class="tl-label">Pull Audience Lab</div>
+        <div class="tl-desc">Fetch new visitor records from each client's AL segment. 7-day lookback window with overlap.</div>
+        <div class="tl-time">5:00 AM UTC</div>
+      </div>
+      <div class="tl-connector"></div>
+      <div class="tl-step">
+        <div class="tl-dot green">2</div>
+        <div class="tl-label">Process Visitors</div>
+        <div class="tl-desc">Classify URLs via taxonomy, score intent (points model), score confidence (identity trust), generate tags.</div>
+        <div class="tl-time">6:00 AM UTC</div>
+      </div>
+      <div class="tl-connector"></div>
+      <div class="tl-step">
+        <div class="tl-dot orange">3</div>
+        <div class="tl-label">Push to GHL</div>
+        <div class="tl-desc">Create/update contacts in GoHighLevel for Medium+ intent AND Medium+ confidence visitors. Batch of 10 per run.</div>
+        <div class="tl-time">7:00 AM UTC</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!--  TAXONOMY BREAKDOWN                         -->
+  <!-- ════════════════════════════════════════════ -->
+  <div class="taxonomy-section">
+    <h2>Taxonomy Categories by Client</h2>
+    <p class="subtitle">URL classification rules that determine what visitors are researching — drives intent scoring and GHL tags</p>
+
+    <div class="taxonomy-grid">
+      <div class="taxonomy-card">
+        <h3>SA Spine</h3>
+        <div class="domain-label">saspine.com — Spine Surgery</div>
+        <ul class="cat-list">
+          <li><span class="cat-name">Conditions</span> <span class="cat-count">18 rules</span></li>
+          <li><span class="cat-name">Surgical Procedures</span> <span class="cat-count">13 rules</span></li>
+          <li><span class="cat-name">Services</span> <span class="cat-count">5 rules</span></li>
+          <li><span class="cat-name">Provider Research</span> <span class="cat-count">10 rules</span></li>
+          <li><span class="cat-name">High Intent</span> <span class="cat-count">8 rules</span></li>
+        </ul>
+      </div>
+      <div class="taxonomy-card">
+        <h3>AZ Breasts</h3>
+        <div class="domain-label">azbreasts.com — Plastic Surgery</div>
+        <ul class="cat-list">
+          <li><span class="cat-name">Breast Procedures</span> <span class="cat-count">7 rules</span></li>
+          <li><span class="cat-name">High Intent</span> <span class="cat-count">5 rules</span></li>
+          <li><span class="cat-name">Provider Research</span> <span class="cat-count">3 rules</span></li>
+        </ul>
+      </div>
+      <div class="taxonomy-card">
+        <h3>Four Winds CMMS</h3>
+        <div class="domain-label">fourwindscmms.com — B2B SaaS</div>
+        <ul class="cat-list">
+          <li><span class="cat-name">Product Features</span> <span class="cat-count">7 rules</span></li>
+          <li><span class="cat-name">Industries</span> <span class="cat-count">5 rules</span></li>
+          <li><span class="cat-name">High Intent</span> <span class="cat-count">4 rules</span></li>
+          <li><span class="cat-name">Lead Magnet</span> <span class="cat-count">3 rules</span></li>
+        </ul>
+      </div>
+      <div class="taxonomy-card">
+        <h3>The Brilliance Revolution</h3>
+        <div class="domain-label">thebrilliancerevolution.com — Coaching</div>
+        <ul class="cat-list">
+          <li><span class="cat-name">Services</span> <span class="cat-count">8 rules</span></li>
+          <li><span class="cat-name">Provider Research</span> <span class="cat-count">2 rules</span></li>
+          <li><span class="cat-name">Content</span> <span class="cat-count">2 rules</span></li>
+          <li><span class="cat-name">Lead Magnet</span> <span class="cat-count">2 rules</span></li>
+          <li><span class="cat-name">High Intent</span> <span class="cat-count">3 rules</span></li>
+        </ul>
+      </div>
+      <div class="taxonomy-card">
+        <h3>Waverly Manor</h3>
+        <div class="domain-label">waverlymanor.com — Event Venue</div>
+        <ul class="cat-list">
+          <li><span class="cat-name">Event Types</span> <span class="cat-count">15 rules</span></li>
+          <li><span class="cat-name">Venue Features</span> <span class="cat-count">9 rules</span></li>
+          <li><span class="cat-name">Services</span> <span class="cat-count">9 rules</span></li>
+          <li><span class="cat-name">Provider Research</span> <span class="cat-count">6 rules</span></li>
+          <li><span class="cat-name">High Intent</span> <span class="cat-count">10 rules</span></li>
+          <li><span class="cat-name">Content</span> <span class="cat-count">1 rule</span></li>
+        </ul>
+      </div>
+      <div class="taxonomy-card">
+        <h3>Dough Babies</h3>
+        <div class="domain-label">Cute C Toys — E-Commerce</div>
+        <ul class="cat-list">
+          <li><span class="cat-name">Product Features</span> <span class="cat-count">11 rules</span></li>
+          <li><span class="cat-name">Provider Research</span> <span class="cat-count">7 rules</span></li>
+          <li><span class="cat-name">Content</span> <span class="cat-count">1 rule</span></li>
+          <li><span class="cat-name">High Intent</span> <span class="cat-count">5 rules</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!--  EXTERNAL SERVICES                          -->
+  <!-- ════════════════════════════════════════════ -->
+  <div class="matrix-section" style="margin-top:48px">
+    <h2>External Services & Integrations</h2>
+    <p class="subtitle">Third-party APIs and platforms this pipeline connects to</p>
+
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Role</th>
+          <th>Connection Type</th>
+          <th>Auth</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="client-name">Audience Lab</td>
+          <td>Visitor identity resolution & enrichment. Provides HEM hash, name, email, phone, demographics, employer data, social profiles.</td>
+          <td>REST API (pull cron + webhook)</td>
+          <td>X-API-KEY header</td>
+        </tr>
+        <tr>
+          <td class="client-name">Neon Postgres</td>
+          <td>Primary data store. Serverless Postgres with pooled connections.</td>
+          <td>@neondatabase/serverless</td>
+          <td>DATABASE_URL connection string</td>
+        </tr>
+        <tr>
+          <td class="client-name">GoHighLevel (GHL)</td>
+          <td>CRM destination. Receives scored contacts with tags and custom fields. Triggers GHL workflows for outreach.</td>
+          <td>REST API (push cron)</td>
+          <td>Bearer token (per-client or agency-level)</td>
+        </tr>
+        <tr>
+          <td class="client-name">Vercel</td>
+          <td>Hosting & orchestration. Next.js 14 app, Vercel Cron for scheduled jobs, edge functions.</td>
+          <td>Platform</td>
+          <td>CRON_SECRET for job auth</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    P5 Marketing — Pixel Intelligence Pipeline System Map · Generated March 2026
+  </div>
+
+</div>
+</body>
+</html>

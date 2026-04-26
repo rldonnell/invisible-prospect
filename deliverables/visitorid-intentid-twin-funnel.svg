@@ -1,0 +1,169 @@
+<svg viewBox="0 0 1200 960" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif">
+  <title id="title">IntentID and VisitorID Twin Funnel with Engagement Scoring</title>
+  <desc id="desc">P5 Marketing's two parallel lead pipelines. IntentID (cold) drives founder-direct outreach to ICP-matched prospects from Audience Lab. VisitorID (warm) accepts traffic from paid social, search, and organic channels. Cross-pipeline engagement promotes leads to HOT.</desc>
+
+  <defs>
+    <marker id="arrow-gold" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#b45309"/>
+    </marker>
+    <marker id="arrow-navy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1e3a5f"/>
+    </marker>
+    <marker id="arrow-terra" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9a3412"/>
+    </marker>
+    <style>
+      .h1 { font-size: 28px; font-weight: 700; fill: #0f172a; letter-spacing: -0.01em; }
+      .h2 { font-size: 14px; font-weight: 500; fill: #64748b; letter-spacing: 0.02em; }
+      .col-title { font-size: 22px; font-weight: 700; fill: #ffffff; letter-spacing: -0.01em; }
+      .col-tag { font-size: 12px; font-weight: 600; fill: #ffffff; letter-spacing: 0.12em; opacity: 0.85; }
+      .stage-label { font-size: 17px; font-weight: 700; fill: #ffffff; letter-spacing: -0.01em; }
+      .stage-sub { font-size: 12px; font-weight: 500; fill: #ffffff; opacity: 0.82; }
+      .feeder-band { font-size: 11px; font-weight: 600; fill: #64748b; letter-spacing: 0.14em; }
+      .chip-warm { font-size: 12px; font-weight: 600; fill: #1e3a5f; }
+      .chip-cold { font-size: 12px; font-weight: 600; fill: #9a3412; }
+      .loop-label { font-size: 13px; font-weight: 700; fill: #b45309; letter-spacing: 0.14em; }
+      .out-title { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+      .out-sub { font-size: 12px; font-weight: 500; }
+      .legend { font-size: 11px; font-weight: 500; fill: #64748b; letter-spacing: 0.04em; }
+      .wm-p5 { font-size: 16px; font-weight: 800; fill: #ffffff; letter-spacing: -0.02em; }
+      .wm-mark { font-size: 10px; font-weight: 700; fill: #0f172a; letter-spacing: 0.18em; }
+      .scoring-tag { font-size: 11px; font-weight: 700; fill: #475569; letter-spacing: 0.14em; }
+      .scoring-rule { font-size: 12px; font-weight: 500; fill: #334155; }
+      .scoring-rule-strong { font-size: 12px; font-weight: 700; fill: #b45309; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="960" fill="#fafafa"/>
+
+  <!-- P5 Marketing wordmark (top-left) -->
+  <rect x="32" y="28" width="34" height="34" rx="6" fill="#1e3a5f"/>
+  <text x="49" y="51" class="wm-p5" text-anchor="middle">P5</text>
+  <text x="74" y="50" class="wm-mark">MARKETING</text>
+
+  <!-- Title -->
+  <text x="600" y="52" class="h1" text-anchor="middle">IntentID + VisitorID</text>
+  <text x="600" y="78" class="h2" text-anchor="middle">Cross-pipeline engagement promotes leads to HOT</text>
+
+  <!-- ============ FEEDER BAND ============ -->
+  <text x="300" y="108" class="feeder-band" text-anchor="middle">FEEDER</text>
+  <text x="900" y="108" class="feeder-band" text-anchor="middle">FEEDERS</text>
+
+  <!-- LEFT: Cold feeder (single wide chip, was on right in v1) -->
+  <g>
+    <rect x="140" y="118" width="320" height="26" rx="13" fill="#fdebdc" stroke="#9a3412" stroke-width="1"/>
+    <text x="300" y="135" class="chip-cold" text-anchor="middle">Audience Lab  ·  Cold Data Segment</text>
+    <line x1="300" y1="146" x2="300" y2="172" stroke="#9a3412" stroke-width="1.2" marker-end="url(#arrow-terra)"/>
+  </g>
+
+  <!-- RIGHT: Warm feeders (5 channel chips, were on left in v1) -->
+  <!-- Chips spaced across 705..1095 (width 390) -->
+  <g>
+    <rect x="705" y="118" width="78" height="26" rx="13" fill="#eef2f8" stroke="#1e3a5f" stroke-width="1"/>
+    <text x="744" y="135" class="chip-warm" text-anchor="middle">Facebook</text>
+    <line x1="744" y1="146" x2="744" y2="172" stroke="#1e3a5f" stroke-width="1.2" marker-end="url(#arrow-navy)"/>
+  </g>
+  <g>
+    <rect x="790" y="118" width="78" height="26" rx="13" fill="#eef2f8" stroke="#1e3a5f" stroke-width="1"/>
+    <text x="829" y="135" class="chip-warm" text-anchor="middle">Instagram</text>
+    <line x1="829" y1="146" x2="829" y2="172" stroke="#1e3a5f" stroke-width="1.2" marker-end="url(#arrow-navy)"/>
+  </g>
+  <g>
+    <rect x="875" y="118" width="74" height="26" rx="13" fill="#eef2f8" stroke="#1e3a5f" stroke-width="1"/>
+    <text x="912" y="135" class="chip-warm" text-anchor="middle">LinkedIn</text>
+    <line x1="912" y1="146" x2="912" y2="172" stroke="#1e3a5f" stroke-width="1.2" marker-end="url(#arrow-navy)"/>
+  </g>
+  <g>
+    <rect x="956" y="118" width="86" height="26" rx="13" fill="#eef2f8" stroke="#1e3a5f" stroke-width="1"/>
+    <text x="999" y="135" class="chip-warm" text-anchor="middle">Google Ads</text>
+    <line x1="999" y1="146" x2="999" y2="172" stroke="#1e3a5f" stroke-width="1.2" marker-end="url(#arrow-navy)"/>
+  </g>
+  <g>
+    <rect x="1049" y="118" width="68" height="26" rx="13" fill="#eef2f8" stroke="#1e3a5f" stroke-width="1"/>
+    <text x="1083" y="135" class="chip-warm" text-anchor="middle">Organic</text>
+    <line x1="1083" y1="146" x2="1083" y2="172" stroke="#1e3a5f" stroke-width="1.2" marker-end="url(#arrow-navy)"/>
+  </g>
+
+  <!-- ============ LEFT FUNNEL: IntentID (Cold) - was on right in v1 ============ -->
+  <rect x="100" y="180" width="400" height="60" fill="#9a3412"/>
+  <text x="300" y="212" class="col-title" text-anchor="middle">IntentID™</text>
+  <text x="300" y="232" class="col-tag" text-anchor="middle">COLD PIPELINE</text>
+
+  <polygon points="100,250 500,250 480,330 120,330" fill="#9a3412"/>
+  <text x="300" y="284" class="stage-label" text-anchor="middle">Target Audience</text>
+  <text x="300" y="304" class="stage-sub" text-anchor="middle">Audience Lab cold segment</text>
+
+  <polygon points="120,330 480,330 460,410 140,410" fill="#b1471a"/>
+  <text x="300" y="364" class="stage-label" text-anchor="middle">ICP Validated</text>
+  <text x="300" y="384" class="stage-sub" text-anchor="middle">Title, size, email gates</text>
+
+  <polygon points="140,410 460,410 440,490 160,490" fill="#c75a23"/>
+  <text x="300" y="444" class="stage-label" text-anchor="middle">Deduped</text>
+  <text x="300" y="464" class="stage-sub" text-anchor="middle">Skip overlap with warm</text>
+
+  <polygon points="160,490 440,490 420,570 180,570" fill="#dd6e2f"/>
+  <text x="300" y="524" class="stage-label" text-anchor="middle">Direct Outreach</text>
+  <text x="300" y="544" class="stage-sub" text-anchor="middle">Personalized email sequence</text>
+
+  <polygon points="180,570 420,570 400,650 200,650" fill="#f3823e"/>
+  <text x="300" y="604" class="stage-label" text-anchor="middle">Visited Website</text>
+  <text x="300" y="624" class="stage-sub" text-anchor="middle">Email click drives site visit</text>
+
+  <!-- ============ RIGHT FUNNEL: VisitorID (Warm) - was on left in v1 ============ -->
+  <rect x="700" y="180" width="400" height="60" fill="#1e3a5f"/>
+  <text x="900" y="212" class="col-title" text-anchor="middle">VisitorID™</text>
+  <text x="900" y="232" class="col-tag" text-anchor="middle">WARM PIPELINE</text>
+
+  <polygon points="700,250 1100,250 1080,330 720,330" fill="#1e3a5f"/>
+  <text x="900" y="284" class="stage-label" text-anchor="middle">Website Visit</text>
+  <text x="900" y="304" class="stage-sub" text-anchor="middle">Pixel fires on page load</text>
+
+  <polygon points="720,330 1080,330 1060,410 740,410" fill="#26487a"/>
+  <text x="900" y="364" class="stage-label" text-anchor="middle">Identified</text>
+  <text x="900" y="384" class="stage-sub" text-anchor="middle">Audience Lab match</text>
+
+  <polygon points="740,410 1060,410 1040,490 760,490" fill="#2e5695"/>
+  <text x="900" y="444" class="stage-label" text-anchor="middle">Scored</text>
+  <text x="900" y="464" class="stage-sub" text-anchor="middle">Intent signals processed</text>
+
+  <polygon points="760,490 1040,490 1020,570 780,570" fill="#3664b0"/>
+  <text x="900" y="524" class="stage-label" text-anchor="middle">Warm Sequence</text>
+  <text x="900" y="544" class="stage-sub" text-anchor="middle">Personalized follow-up</text>
+
+  <polygon points="780,570 1020,570 1000,650 800,650" fill="#3e72cb"/>
+  <text x="900" y="604" class="stage-label" text-anchor="middle">Re-engaged</text>
+  <text x="900" y="624" class="stage-sub" text-anchor="middle">Open or click signals HOT</text>
+
+  <!-- ============ CROSS-PIPELINE LOOP ARROW ============ -->
+  <!-- Solid (was dashed in v1), curves from bottom of cold funnel up and over to top of warm funnel. -->
+  <!-- Label is now a horizontal text element placed above the apex - readable left-to-right. -->
+  <path d="M 450,610 C 600,610 580,290 720,290"
+        stroke="#b45309" stroke-width="3" fill="none"
+        marker-end="url(#arrow-gold)"/>
+
+  <!-- Horizontal label sits at the apex of the curve, no textPath, always upright. -->
+  <text x="585" y="425" class="loop-label" text-anchor="middle">EMAIL CLICK DRIVES SITE VISIT</text>
+
+  <!-- ============ OUTCOMES ============ -->
+  <!-- HIGH Lead (LEFT, under cold pipeline) - was "HOT Lead" in v1 -->
+  <rect x="120" y="780" width="450" height="100" fill="#ffffff" stroke="#475569" stroke-width="2" rx="8"/>
+  <text x="345" y="812" class="out-title" text-anchor="middle" fill="#0f172a">HIGH Lead</text>
+  <text x="345" y="835" class="out-sub" text-anchor="middle" fill="#475569">Engaged more than once in one channel</text>
+  <text x="345" y="855" class="out-sub" text-anchor="middle" fill="#475569">Standard sales follow-up</text>
+
+  <!-- HOT Lead (RIGHT, under warm pipeline) - was "DIAMOND Lead" in v1 -->
+  <rect x="630" y="780" width="450" height="100" fill="#fef3c7" stroke="#b45309" stroke-width="2" rx="8"/>
+
+  <!-- Flame icon (replaces v1's diamond glyph since the lead is now called HOT not DIAMOND) -->
+  <g transform="translate(680,805)">
+    <path d="M 20 0 C 14 9 9 14 9 23 C 9 31 14 40 20 40 C 26 40 31 31 31 23 C 31 19 27 17 24 13 C 22 17 18 13 20 0 Z" fill="#b45309"/>
+    <path d="M 20 11 C 17 17 14 20 14 26 C 14 31 17 35 20 35 C 23 35 26 31 26 26 C 26 22 24 21 22 18 C 21 21 18 18 20 11 Z" fill="#fbbf24"/>
+  </g>
+
+  <text x="780" y="812" class="out-title" fill="#7c2d12">HOT Lead</text>
+  <text x="780" y="835" class="out-sub" fill="#7c2d12">Engaged across both channels</text>
+  <text x="780" y="855" class="out-sub" fill="#7c2d12">Highest-priority sales escalation</text>
+
+  <!-- Legend -->
+  <text x="600" y="918" class="legend" text-anchor="middle">IntentID = ICP-matched cold prospects  ·  VisitorID = pixel-identified site visitors  ·  HOT = engaged across both</text>
+</svg>

@@ -3,3 +3,17 @@ node_modules/
 .env
 .env.local
 .vercel
+
+# macOS
+.DS_Store
+
+# Google Drive sync metadata (custom folder icons)
+# Drive creates a literal "Icon\r" file in every synced folder
+Icon?
+**/Icon?
+
+# Editor / OS scratch
+*.swp
+*.swo
+.idea/
+.vscode/
