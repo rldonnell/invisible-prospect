@@ -117,12 +117,23 @@ export async function GET(request) {
     const quietCutoff = new Date(now - quietDays * 24 * 60 * 60 * 1000).toISOString();
     const hardCutoff  = new Date(now - hardDays  * 24 * 60 * 60 * 1000).toISOString();
 
-    // Eligibility has two branches because the webhook only started recording
-    // `email_sent` events on 2026-04-08. Pre-webhook enrollments have
-    // `last_sent_at IS NULL` and `last_step_sent = 0` even though their
-    // sequences have long since finished, so we fall back to `enrolled_at`
-    // for those. Instantly's 3-email sequence wraps in ~14 days, so any
-    // enrollment older than hard_days without engagement is safe to reclaim.
+    // Eligibility has THREE branches:
+    //   1. Normal flow: webhook recorded sends, sequence finished or hit
+    //      hard-day timeout, AND quiet window past.
+    //   2. Pre-webhook enrollments (before 2026-04-08): `last_sent_at IS NULL`
+    //      and `last_step_sent = 0` even though their sequences finished
+    //      long ago. Fall back to `enrolled_at`.
+    //   3. Stuck mid-sequence: `enrolled_at` is old but `last_sent_at` is
+    //      recent. This happens when account-level cap pressure stalls a
+    //      sequence: a lead enrolled 17 days ago that should have wrapped
+    //      by day 8 finally crawled to step 2 yesterday. Branch 1 won't
+    //      fire (quiet window not satisfied) and Branch 2 won't fire
+    //      (last_sent_at not null). Without this third branch the cron
+    //      would return processed=0 indefinitely while the cap stays full.
+    //
+    // Every sequence in the codebase wraps within ~10 days, so if a lead
+    // is hard_days+ into enrollment with no engagement, it isn't going to
+    // engage now - safe to reclaim regardless of where the sequence is.
     const eligible = clientFilter
       ? await sql`
           SELECT e.id AS enrollment_id, e.instantly_lead_id, e.campaign_id,
@@ -134,6 +145,7 @@ export async function GET(request) {
             AND e.first_engaged_at IS NULL
             AND COALESCE(e.status, 'sent') NOT IN ('cleaned_up', 'failed')
             AND (
+              -- Branch 1: normal-flow completion + quiet window
               (
                 e.last_sent_at IS NOT NULL
                 AND e.last_sent_at < ${quietCutoff}::timestamptz
@@ -142,9 +154,15 @@ export async function GET(request) {
                   OR e.last_sent_at < ${hardCutoff}::timestamptz
                 )
               )
+              -- Branch 2: pre-webhook enrollments (no email_sent stamps)
               OR (
                 e.last_sent_at IS NULL
                 AND e.enrolled_at IS NOT NULL
+                AND e.enrolled_at < ${hardCutoff}::timestamptz
+              )
+              -- Branch 3: stuck mid-sequence (cap-induced stalling)
+              OR (
+                e.enrolled_at IS NOT NULL
                 AND e.enrolled_at < ${hardCutoff}::timestamptz
               )
             )
@@ -162,6 +180,7 @@ export async function GET(request) {
             AND e.first_engaged_at IS NULL
             AND COALESCE(e.status, 'sent') NOT IN ('cleaned_up', 'failed')
             AND (
+              -- Branch 1: normal-flow completion + quiet window
               (
                 e.last_sent_at IS NOT NULL
                 AND e.last_sent_at < ${quietCutoff}::timestamptz
@@ -170,9 +189,15 @@ export async function GET(request) {
                   OR e.last_sent_at < ${hardCutoff}::timestamptz
                 )
               )
+              -- Branch 2: pre-webhook enrollments (no email_sent stamps)
               OR (
                 e.last_sent_at IS NULL
                 AND e.enrolled_at IS NOT NULL
+                AND e.enrolled_at < ${hardCutoff}::timestamptz
+              )
+              -- Branch 3: stuck mid-sequence (cap-induced stalling)
+              OR (
+                e.enrolled_at IS NOT NULL
                 AND e.enrolled_at < ${hardCutoff}::timestamptz
               )
             )
